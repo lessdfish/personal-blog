@@ -1,0 +1,31 @@
+server:
+  port: 9011
+
+spring:
+  application:
+    name: user-service
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        register-enabled: false
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/blog_cloud?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 032581
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+pagehelper:
+  helperDialect: mysql
+  reasonable: true
+  supportMethodsArguments: true
+  params: count=countSql
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
