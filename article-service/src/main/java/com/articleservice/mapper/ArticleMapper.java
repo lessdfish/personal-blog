@@ -1,10 +1,7 @@
 package com.articleservice.mapper;
 
 import com.articleservice.entity.Article;
-import org.apache.ibatis.annotations.Insert;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Options;
-import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
@@ -31,4 +28,25 @@ public interface ArticleMapper{
             order by id desc
             """)
     List<Article> selectPublishedList();
+
+    @Select("""
+            select * from tb_article
+            where id = #{id} and status = 1
+            """)
+    Article selectById(Long id);
+
+    @Select("""
+            select * from tb_article
+            where status = 1
+            order by view_count desc, id desc
+            limit #{limit}
+            """)
+    List<Article> selectHotList(int limit);
+
+    @Update("""
+            update tb_article
+            set view_count = view_count + 1
+            where id = #{id}
+            """)
+    int incrementViewCount(Long id);
 }

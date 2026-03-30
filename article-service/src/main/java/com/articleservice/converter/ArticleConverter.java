@@ -1,6 +1,7 @@
 package com.articleservice.converter;
 
 import com.articleservice.entity.Article;
+import com.articleservice.vo.ArticleDetailVO;
 import com.articleservice.vo.ArticleListVO;
 
 /**
