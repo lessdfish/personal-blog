@@ -62,4 +62,15 @@ public interface UserMapper {
         where id = #{userId}
         """)
     int updateUserStatus(@Param("userId") Long userId, @Param("status") Integer status);
+
+    @Select("""
+        <script>
+        select * from tb_user
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        </script>
+        """)
+    List<User> selectByIds(@Param("ids") List<Long> ids);
 }

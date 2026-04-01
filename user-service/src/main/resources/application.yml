@@ -29,3 +29,11 @@ pagehelper:
 mybatis:
   configuration:
     map-underscore-to-camel-case: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+  api-docs:
+    enabled: true

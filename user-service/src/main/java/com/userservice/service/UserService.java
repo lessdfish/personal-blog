@@ -1,6 +1,7 @@
 package com.userservice.service;
 
 import com.alibaba.nacos.common.utils.StringUtils;
+import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
 import com.blogcommon.result.Result;
@@ -16,11 +17,14 @@ import com.userservice.mapper.UserMapper;
 import com.userservice.vo.LoginVO;
 import com.userservice.vo.PageVO;
 import com.userservice.vo.UserInfoVO;
+import com.userservice.vo.UserSimpleVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ClassName:UserService
@@ -40,6 +44,8 @@ public class UserService {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private RoleMapper roleMapper;
+    @Autowired(required = false)
+    private StringRedisTemplate stringRedisTemplate;
 
     //注册
     public void register(RegisterDTO registerDTO) {
@@ -62,10 +68,10 @@ public class UserService {
     //登录
     public LoginVO login(LoginDTO loginDTO) {
         User dbUser = userMapper.selectByUsername(loginDTO.getUsername());
-        Role role = roleMapper.selectById(dbUser.getRoleId());
         if (dbUser == null) {
             throw new BusinessException(ResultCode.USERNAME_NOT_EXIST);
         }
+        Role role = roleMapper.selectById(dbUser.getRoleId());
         if (role == null) {
             throw new BusinessException(ResultCode.ROLE_NULL);
         }
@@ -79,12 +85,72 @@ public class UserService {
 
         String token = JwtUtil.createToken(dbUser.getId(), dbUser.getUsername(),role.getRoleCode());
 
+        // 缓存token到Redis
+        cacheToken(dbUser.getId(), token);
+
         UserInfoVO userInfoVO = UserConverter.toUserInfoVO(dbUser,role);
 
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(token);
         loginVO.setUserInfoVO(userInfoVO);
         return loginVO;
+    }
+
+    /**
+     * 缓存Token到Redis
+     */
+    private void cacheToken(Long userId, String token) {
+        if (stringRedisTemplate != null) {
+            String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
+            stringRedisTemplate.opsForValue().set(key, token, 
+                    RedisKeyConstants.USER_TOKEN_EXPIRE, TimeUnit.SECONDS);
+        }
+    }
+
+    /**
+     * 验证Token是否有效（是否在Redis中）
+     */
+    public boolean validateToken(Long userId, String token) {
+        if (stringRedisTemplate == null) {
+            return true; // Redis未启用，默认通过
+        }
+        String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
+        String cachedToken = stringRedisTemplate.opsForValue().get(key);
+        return token != null && token.equals(cachedToken);
+    }
+
+    /**
+     * 用户登出（删除Redis中的Token）
+     */
+    public void logout(Long userId) {
+        if (stringRedisTemplate != null && userId != null) {
+            String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
+            stringRedisTemplate.delete(key);
+        }
+    }
+
+    /**
+     * 踢用户下线（管理员功能）
+     */
+    public void kickout(Long userId) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+        logout(userId);
+    }
+
+    /**
+     * 刷新Token过期时间
+     */
+    public void refreshToken(Long userId) {
+        if (stringRedisTemplate != null && userId != null) {
+            String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
+            stringRedisTemplate.expire(key, RedisKeyConstants.USER_TOKEN_EXPIRE, TimeUnit.SECONDS);
+        }
     }
 
     //查询当前用户信息
@@ -201,5 +267,19 @@ public class UserService {
         if (rows <= 0) {
             throw new BusinessException(ResultCode.USER_STATUS_UPDATE_FAILED);
         }
+    }
+
+    public List<UserSimpleVO> getBatchUserSimple(List<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        List<User> users = userMapper.selectByIds(userIds);
+        return users.stream().map(user -> {
+            UserSimpleVO vo = new UserSimpleVO();
+            vo.setId(user.getId());
+            vo.setName(user.getNickname());
+            vo.setAvatar(user.getAvatar());
+            return vo;
+        }).toList();
     }
 }

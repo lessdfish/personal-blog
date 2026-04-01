@@ -16,6 +16,6 @@ import lombok.Data;
 public class UserPageQueryDTO {
     private Integer pageNum;
     private Integer pageSize;
-    private String username;
-    private Integer status;
+    private String username; //修改，将username去掉
+    private Integer status; // 同上
 }

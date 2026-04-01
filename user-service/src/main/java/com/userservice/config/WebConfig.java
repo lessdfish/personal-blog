@@ -23,6 +23,10 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/user/login",
                         "/user/register",
                         "/user/hello",
-                        "/user/parse");
+                        "/user/parse",
+                        "/user/batch/simple",  // 允许Feign调用
+                        "/swagger-ui.html",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**");
     }
 }

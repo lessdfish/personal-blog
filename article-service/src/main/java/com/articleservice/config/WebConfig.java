@@ -21,6 +21,12 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new JwtInterceptor())
                 .addPathPatterns("/**")
-                .excludePathPatterns("/article/page","/article/detail/**","/article/hot");
+                .excludePathPatterns("/article/page",
+                        "/article/detail/**",
+                        "/article/hot",
+                        "/article/simple/**",
+                        "/swagger-ui.html",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**");
     }
 }

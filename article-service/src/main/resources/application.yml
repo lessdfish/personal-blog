@@ -12,15 +12,15 @@ spring:
     username: root
     password: 032581
     driver-class-name: com.mysql.cj.jdbc.Driver
-#  data:
-#    redis:
-#      host: 127.0.0.1
-#      port: 6379
-#  rabbitmq:
-#    host: 127.0.0.1
-#    port: 5672
-#    username: guest
-#    password: guest
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
 
 mybatis:
   configuration:
@@ -30,3 +30,11 @@ pagehelper:
   reasonable: true
   supportMethodsArguments: true
   params: count=countSql
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+  api-docs:
+    enabled: true

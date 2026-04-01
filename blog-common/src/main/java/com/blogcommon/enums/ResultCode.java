@@ -52,8 +52,21 @@ public enum ResultCode {
     ARTICLE_UPDATE_FAILED(4003, "文章修改失败"),
     ARTICLE_DELETE_FAILED(4004, "文章删除失败"),
     TITLE_NOT_NULL(4005,"标题不能为空"),
-    CONTENT_NOT_NULL(4006,"内容不能为空");
+    CONTENT_NOT_NULL(4006,"内容不能为空"),
 
+    //评论
+    COMMENT_CREATE_FAILED(5001,"评论创建失败"),
+    COMMENT_DELETE_FAILED(5002, "评论删除失败"),
+    COMMENT_NOT_FOUND(5003,"评论未找到" ),
+    ARTICLE_NOT_FOUND(5004, "文章未找到"),
+
+    //通知
+    NOTIFY_NOT_FOUND(6001, "通知不存在"),
+    NOTIFY_READ_FAILED(6002, "通知已读标记失败"),
+    NOTIFY_DELETE_FAILED(6003, "通知删除失败"),
+
+
+    REDIS_NOT_RUNNING(6004, "Redis 未运行");
     private final Integer code;
     private final String message;
 
