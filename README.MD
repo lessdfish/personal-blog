@@ -1,8 +1,8 @@
-# blog-cloud
+# Blog-cloud
 
 基于 Spring Boot 3、Spring Cloud Gateway、Spring Security、JWT、MyBatis、Redis、RabbitMQ、Nacos 构建的个人博客论坛后端项目。
 
-项目采用多模块微服务拆分，围绕用户鉴权、文章发布、评论链路、通知中心、热点数据缓存和网关统一接入进行实现，适合作为 Java 后端 / 微服务方向的练手与展示项目。
+项目采用多模块微服务拆分，围绕用户鉴权、文章发布、评论链路、通知中心、热点数据缓存和网关统一接入进行实现.
 
 ## 项目特性
 
