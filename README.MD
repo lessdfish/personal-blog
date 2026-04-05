@@ -201,7 +201,7 @@ mvn -pl blog-gateway spring-boot:run
 docker compose --profile tools run --rm k6 run /scripts/xxx.js
 ```
 
-## 后续可优化方向
+## 后续优化方向
 
 - 接入统一配置中心与服务注册发现，去掉本地直连配置
 - 增加 Dockerfile 与一键部署脚本
