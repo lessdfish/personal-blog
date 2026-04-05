@@ -20,10 +20,6 @@ public class JwtInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String authHeader = request.getHeader("Authorization");
-        
-        // 调试日志
-        System.out.println("[JwtInterceptor] Authorization header: " + authHeader);
-
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             System.out.println("[JwtInterceptor] 未登录：Authorization header 为空或格式错误");
             response.setContentType("application/json;charset=UTF-8");
@@ -33,13 +29,11 @@ public class JwtInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        String token = authHeader.substring(7);  // 去掉 "Bearer " 前缀
+        String token = authHeader.substring(7);
         System.out.println("[JwtInterceptor] Token: " + token);
 
         try {
             Claims claims = JwtUtil.parseToken(token);
-            
-            // 修复：处理 Integer 到 Long 的转换问题
             Object userIdObj = claims.get("userId");
             Long userId = null;
             if (userIdObj instanceof Integer) {

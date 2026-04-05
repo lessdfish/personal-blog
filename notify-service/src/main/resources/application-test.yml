@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${MYSQL_TEST_URL:jdbc:mysql://127.0.0.1:3306/blog_cloud_test?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
+    username: ${MYSQL_TEST_USERNAME:${MYSQL_USERNAME:root}}
+    password: ${MYSQL_TEST_PASSWORD:${MYSQL_PASSWORD:change-me}}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}

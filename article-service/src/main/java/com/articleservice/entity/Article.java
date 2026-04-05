@@ -1,64 +1,29 @@
 package com.articleservice.entity;
 
+import lombok.Data;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-import lombok.Data;
-
-
-/**
- * <p>
- * 
- * </p>
- *
- * @author lyp
- * @since 2026-03-28
- */
 @Data
-
 public class Article implements Serializable {
-
     private static final long serialVersionUID = 1L;
 
-    /**
-     * 文章ID
-     */
-
     private Long id;
-
-    /**
-     * 标题
-     */
     private String title;
-
-    /**
-     * 内容
-     */
+    private String summary;
     private String content;
-
-    /**
-     * 作者ID
-     */
     private Long authorId;
-
-    /**
-     * 状态：1正常 0删除
-     */
+    private Long boardId;
+    private String tags;
     private Integer status;
-
-    /**
-     * 浏览量
-     */
     private Integer viewCount;
-
-    /**
-     * 创建时间
-     */
+    private Integer commentCount;
+    private Integer likeCount;
+    private Integer favoriteCount;
+    private Integer isTop;
+    private Integer isEssence;
+    private Integer allowComment;
     private LocalDateTime createTime;
-
-    /**
-     * 更新时间
-     */
     private LocalDateTime updateTime;
 }

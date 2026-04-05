@@ -1,14 +1,22 @@
 package com.articleservice.service;
 
 import com.articleservice.converter.ArticleConverter;
+import com.articleservice.dto.ArticleManageDTO;
 import com.articleservice.dto.ArticlePublishDTO;
+import com.articleservice.dto.BoardCreateDTO;
 import com.articleservice.entity.Article;
+import com.articleservice.entity.ArticleFavorite;
+import com.articleservice.entity.ArticleLike;
+import com.articleservice.entity.Board;
+import com.articleservice.mapper.ArticleFavoriteMapper;
+import com.articleservice.mapper.ArticleLikeMapper;
 import com.articleservice.mapper.ArticleMapper;
-
+import com.articleservice.mapper.BoardMapper;
 import com.articleservice.vo.ArticleDetailVO;
 import com.articleservice.vo.ArticleListVO;
 import com.articleservice.vo.ArticlePageQueryDTO;
 import com.articleservice.vo.ArticleSimpleVO;
+import com.articleservice.vo.BoardVO;
 import com.articleservice.vo.PageVO;
 import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
@@ -23,7 +31,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -34,78 +46,90 @@ public class ArticleService {
     @Autowired
     private ArticleMapper articleMapper;
     @Autowired
+    private BoardMapper boardMapper;
+    @Autowired
+    private ArticleFavoriteMapper articleFavoriteMapper;
+    @Autowired
+    private ArticleLikeMapper articleLikeMapper;
+    @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private ObjectMapper objectMapper;
-    //publish
-    public void publish(Long authorId, ArticlePublishDTO articlePublishDTO) {
+
+    public void publish(Long authorId, ArticlePublishDTO dto) {
         if (authorId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-
-        if (articlePublishDTO == null) {
-            throw new BusinessException(ResultCode.PARAM_NULL);
-        }
-
-        if (!StringUtils.hasText(articlePublishDTO.getTitle())) {
-            throw new BusinessException(ResultCode.TITLE_NOT_NULL);
-        }
-
-        if (!StringUtils.hasText(articlePublishDTO.getContent())) {
-            throw new BusinessException(ResultCode.CONTENT_NOT_NULL);
+        validatePublishDTO(dto);
+        if (dto.getBoardId() != null && boardMapper.selectById(dto.getBoardId()) == null) {
+            throw new BusinessException(ResultCode.BOARD_NOT_EXIST);
         }
 
         Article article = new Article();
-        article.setTitle(articlePublishDTO.getTitle());
-        article.setContent(articlePublishDTO.getContent());
+        article.setTitle(dto.getTitle());
+        article.setSummary(buildSummary(dto));
+        article.setContent(dto.getContent());
         article.setAuthorId(authorId);
+        article.setBoardId(dto.getBoardId());
+        article.setTags(dto.getTags());
         article.setStatus(1);
         article.setViewCount(0);
+        article.setCommentCount(0);
+        article.setLikeCount(0);
+        article.setFavoriteCount(0);
+        article.setIsTop(0);
+        article.setIsEssence(0);
+        article.setAllowComment(1);
 
-        int rows = articleMapper.insert(article);
-        if (rows <= 0) {
+        if (articleMapper.insert(article) <= 0) {
             throw new BusinessException(ResultCode.ARTICLE_PUBLISH_FAILED);
         }
+        touchHeat(article.getId(), 5D);
     }
 
-    //page div
     public PageVO<ArticleListVO> pageArticles(ArticlePageQueryDTO queryDTO) {
-        if (queryDTO == null) {
-            throw new BusinessException(ResultCode.PARAM_NULL);
-        }
+        return pageNormalArticles(queryDTO);
+    }
 
-        Integer pageNum = queryDTO.getPageNum();
-        Integer pageSize = queryDTO.getPageSize();
-
-        if (pageNum == null || pageNum < 1) {
-            throw new BusinessException(ResultCode.PARAM_ERROR);
-        }
-        if (pageSize == null || pageSize < 1) {
-            throw new BusinessException(ResultCode.PARAM_ERROR1);
-        }
-
-        Page<Article> page = PageHelper.startPage(pageNum, pageSize);
-        List<Article> articleList = articleMapper.selectPublishedList();
-
-        List<ArticleListVO> voList = articleList.stream()
-                .map(ArticleConverter::toArticleListVO)
+    public PageVO<ArticleListVO> pageNormalArticles(ArticlePageQueryDTO queryDTO) {
+        validatePageQuery(queryDTO);
+        Page<Article> page = PageHelper.startPage(queryDTO.getPageNum(), queryDTO.getPageSize());
+        List<Article> articles = articleMapper.selectPageByCondition(queryDTO);
+        List<ArticleListVO> list = articles.stream()
+                .map(article -> ArticleConverter.toArticleListVO(article, boardMapper.selectById(article.getBoardId()), getHeat(article.getId())))
                 .toList();
 
         PageVO<ArticleListVO> pageVO = new PageVO<>();
         pageVO.setTotal(page.getTotal());
-        pageVO.setList(voList);
-
+        pageVO.setList(list);
         return pageVO;
     }
 
-    public ArticleDetailVO getDetail(Long id) {
+    public PageVO<ArticleListVO> pageHotArticles(Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 50);
+        int offset = (safePageNum - 1) * safePageSize;
+
+        HotArticleSlice slice = getHotArticlesByPage(offset, safePageSize);
+        PageVO<ArticleListVO> pageVO = new PageVO<>();
+        Long total = articleMapper.countActiveArticles();
+        pageVO.setTotal(total == null ? 0L : total);
+        pageVO.setList(buildArticleListVOs(slice.articles(), slice.heatMap()));
+        return pageVO;
+    }
+
+    public ArticleDetailVO getDetail(Long id, String viewerKey) {
         if (id == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
         }
-
         String cacheKey = ARTICLE_DETAIL_CACHE_KEY + id;
         ArticleDetailVO cached = readCache(cacheKey, ArticleDetailVO.class);
         if (cached != null) {
+            recordView(id, viewerKey);
+            cached.setViewCount(Math.toIntExact(getArticleViews(id)));
+            cached.setHeatScore(getHeat(id));
+            cached.setLikeCount(Math.toIntExact(getArticleLikes(id)));
+            cached.setFavoriteCount(Math.toIntExact(getArticleFavorites(id)));
             return cached;
         }
 
@@ -114,9 +138,11 @@ public class ArticleService {
             throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
         }
 
-        articleMapper.incrementViewCount(id);
-        article.setViewCount((article.getViewCount() == null ? 0 : article.getViewCount()) + 1);
-        ArticleDetailVO vo = ArticleConverter.toArticleDetailVO(article);
+        recordView(id, viewerKey);
+        Article refreshed = articleMapper.selectById(id);
+        ArticleDetailVO vo = ArticleConverter.toArticleDetailVO(refreshed, boardMapper.selectById(refreshed.getBoardId()), getHeat(id));
+        vo.setLikeCount(Math.toIntExact(getArticleLikes(id)));
+        vo.setFavoriteCount(Math.toIntExact(getArticleFavorites(id)));
         writeCache(cacheKey, vo, 10, TimeUnit.MINUTES);
         return vo;
     }
@@ -128,10 +154,8 @@ public class ArticleService {
         if (cached != null) {
             return List.of(cached);
         }
-
-        List<ArticleListVO> list = articleMapper.selectHotList(safeLimit).stream()
-                .map(ArticleConverter::toArticleListVO)
-                .toList();
+        HotArticleSlice slice = getHotArticles(safeLimit);
+        List<ArticleListVO> list = buildArticleListVOs(slice.articles(), slice.heatMap());
         writeCache(cacheKey, list, 5, TimeUnit.MINUTES);
         return list;
     }
@@ -148,7 +172,489 @@ public class ArticleService {
         vo.setId(article.getId());
         vo.setAuthorId(article.getAuthorId());
         vo.setTitle(article.getTitle());
+        vo.setAllowComment(article.getAllowComment());
         return vo;
+    }
+
+    public boolean setArticleLikeStatus(Long userId, Long articleId, boolean targetLiked) {
+        if (userId == null || articleId == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        requireArticle(articleId);
+        return executeInteractionWithLock(RedisKeyConstants.LOCK_ARTICLE_LIKE_KEY, userId, articleId, () -> {
+            if (targetLiked) {
+                ArticleLike articleLike = new ArticleLike();
+                articleLike.setArticleId(articleId);
+                articleLike.setUserId(userId);
+                int rows = articleLikeMapper.insertIgnore(articleLike);
+                if (rows > 0) {
+                    syncArticleLikeCount(articleId);
+                    if (stringRedisTemplate != null) {
+                        stringRedisTemplate.opsForSet().add(RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
+                    }
+                    touchHeat(articleId, 4D);
+                    clearArticleCache(articleId);
+                }
+                return true;
+            }
+
+            int rows = articleLikeMapper.delete(articleId, userId);
+            if (rows > 0) {
+                syncArticleLikeCount(articleId);
+                if (stringRedisTemplate != null) {
+                    stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
+                }
+                touchHeat(articleId, -4D);
+                clearArticleCache(articleId);
+            } else if (stringRedisTemplate != null) {
+                stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
+            }
+            return false;
+        });
+    }
+
+    public boolean setArticleFavoriteStatus(Long userId, Long articleId, boolean targetFavorited) {
+        if (userId == null || articleId == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        requireArticle(articleId);
+        return executeInteractionWithLock(RedisKeyConstants.LOCK_ARTICLE_FAVORITE_KEY, userId, articleId, () -> {
+            if (targetFavorited) {
+                ArticleFavorite favorite = new ArticleFavorite();
+                favorite.setArticleId(articleId);
+                favorite.setUserId(userId);
+                int rows = articleFavoriteMapper.insertIgnore(favorite);
+                if (rows > 0) {
+                    syncArticleFavoriteCount(articleId);
+                    if (stringRedisTemplate != null) {
+                        stringRedisTemplate.opsForSet().add(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
+                    }
+                    touchHeat(articleId, 3D);
+                    clearArticleCache(articleId);
+                }
+                return true;
+            }
+
+            int rows = articleFavoriteMapper.delete(articleId, userId);
+            if (rows > 0) {
+                syncArticleFavoriteCount(articleId);
+                if (stringRedisTemplate != null) {
+                    stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
+                }
+                touchHeat(articleId, -3D);
+                clearArticleCache(articleId);
+            } else if (stringRedisTemplate != null) {
+                stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
+            }
+            return false;
+        });
+    }
+
+    public boolean hasFavorited(Long userId, Long articleId) {
+        if (userId == null || articleId == null) {
+            return false;
+        }
+        if (stringRedisTemplate != null) {
+            Boolean member = stringRedisTemplate.opsForSet()
+                    .isMember(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
+            if (Boolean.TRUE.equals(member)) {
+                return true;
+            }
+        }
+        Long count = articleFavoriteMapper.countByArticleAndUser(articleId, userId);
+        return count != null && count > 0;
+    }
+
+    public PageVO<ArticleListVO> pageMyFavorites(Long userId, Integer pageNum, Integer pageSize) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 50);
+        int offset = (safePageNum - 1) * safePageSize;
+
+        List<Long> articleIds = articleFavoriteMapper.selectArticleIdsByUser(userId, offset, safePageSize);
+        Long total = articleFavoriteMapper.countByUser(userId);
+        List<ArticleListVO> list = articleIds == null || articleIds.isEmpty()
+                ? List.of()
+                : articleMapper.selectByIds(articleIds).stream()
+                .map(article -> ArticleConverter.toArticleListVO(article, boardMapper.selectById(article.getBoardId()), getHeat(article.getId())))
+                .toList();
+
+        PageVO<ArticleListVO> pageVO = new PageVO<>();
+        pageVO.setTotal(total == null ? 0L : total);
+        pageVO.setList(list);
+        return pageVO;
+    }
+
+    public Long getArticleLikes(Long articleId) {
+        Long count = articleLikeMapper.countByArticle(articleId);
+        return count == null ? 0L : count;
+    }
+
+    public Long getArticleFavorites(Long articleId) {
+        Long count = articleFavoriteMapper.countByArticle(articleId);
+        return count == null ? 0L : count;
+    }
+
+    public boolean hasLiked(Long userId, Long articleId) {
+        if (userId == null || articleId == null) {
+            return false;
+        }
+        if (stringRedisTemplate != null) {
+            Boolean isMember = stringRedisTemplate.opsForSet().isMember(
+                    RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
+            if (Boolean.TRUE.equals(isMember)) {
+                return true;
+            }
+        }
+        Long count = articleLikeMapper.countByArticleAndUser(articleId, userId);
+        return count != null && count > 0;
+    }
+
+    public Long getArticleViews(Long articleId) {
+        Article article = articleMapper.selectById(articleId);
+        return article != null && article.getViewCount() != null ? article.getViewCount().longValue() : 0L;
+    }
+
+    public void editArticle(Long userId, String role, Long articleId, ArticlePublishDTO dto) {
+        if (userId == null || articleId == null || dto == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        Article article = requireArticle(articleId);
+        if (!article.getAuthorId().equals(userId) && !isManager(role)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+
+        String lockKey = RedisKeyConstants.LOCK_ARTICLE_EDIT_KEY + articleId;
+        String lockValue = stringRedisTemplate == null ? "local" : RedisLockUtil.tryLock(
+                stringRedisTemplate, lockKey, RedisKeyConstants.LOCK_EXPIRE);
+        if (lockValue == null) {
+            throw new BusinessException(ResultCode.ARTICLE_EDIT_LOCKED);
+        }
+
+        try {
+            validatePublishDTO(dto);
+            article.setTitle(dto.getTitle());
+            article.setSummary(buildSummary(dto));
+            article.setContent(dto.getContent());
+            article.setBoardId(dto.getBoardId());
+            article.setTags(dto.getTags());
+            if (articleMapper.updateArticle(article) <= 0) {
+                throw new BusinessException(ResultCode.ARTICLE_UPDATE_FAILED);
+            }
+            clearArticleCache(articleId);
+        } finally {
+            if (stringRedisTemplate != null) {
+                RedisLockUtil.unlock(stringRedisTemplate, lockKey, lockValue);
+            }
+        }
+    }
+
+    public void deleteArticle(Long userId, String role, Long articleId) {
+        if (userId == null || articleId == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        Article article = requireArticle(articleId);
+        if (!article.getAuthorId().equals(userId) && !isManager(role)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+        if (articleMapper.updateStatus(articleId, 0) <= 0) {
+            throw new BusinessException(ResultCode.ARTICLE_DELETE_FAILED);
+        }
+        clearArticleCache(articleId);
+    }
+
+    public void manageArticle(String role, Long articleId, ArticleManageDTO dto) {
+        if (!isManager(role)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+        Article article = requireArticle(articleId);
+        if (dto.getIsTop() != null) {
+            article.setIsTop(dto.getIsTop());
+        }
+        if (dto.getIsEssence() != null) {
+            article.setIsEssence(dto.getIsEssence());
+        }
+        if (dto.getAllowComment() != null) {
+            article.setAllowComment(dto.getAllowComment());
+        }
+        if (dto.getStatus() != null) {
+            article.setStatus(dto.getStatus());
+        }
+        articleMapper.updateManageInfo(article);
+        touchHeat(articleId, (dto.getIsTop() != null && dto.getIsTop() == 1 ? 6D : 0D)
+                + (dto.getIsEssence() != null && dto.getIsEssence() == 1 ? 10D : 0D));
+        clearArticleCache(articleId);
+    }
+
+    public void createBoard(String role, BoardCreateDTO dto) {
+        if (!isManager(role)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+        if (boardMapper.selectByCode(dto.getBoardCode()) != null) {
+            throw new BusinessException(ResultCode.BOARD_CODE_EXIST);
+        }
+        Board board = new Board();
+        board.setBoardName(dto.getBoardName());
+        board.setBoardCode(dto.getBoardCode());
+        board.setDescription(dto.getDescription());
+        board.setSortOrder(dto.getSortOrder() == null ? 99 : dto.getSortOrder());
+        board.setStatus(1);
+        boardMapper.insert(board);
+    }
+
+    public List<BoardVO> listBoards() {
+        return boardMapper.selectEnabledList().stream().map(board -> {
+            BoardVO vo = new BoardVO();
+            vo.setId(board.getId());
+            vo.setBoardName(board.getBoardName());
+            vo.setBoardCode(board.getBoardCode());
+            vo.setDescription(board.getDescription());
+            vo.setSortOrder(board.getSortOrder());
+            return vo;
+        }).toList();
+    }
+
+    public void updateArticleCommentCount(Long articleId, Integer delta) {
+        if (articleId == null || delta == null || delta == 0) {
+            return;
+        }
+        Article article = articleMapper.selectAnyById(articleId);
+        if (article == null) {
+            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
+        }
+        int current = article.getCommentCount() == null ? 0 : article.getCommentCount();
+        int target = Math.max(0, current + delta);
+        int rows = articleMapper.updateCommentCountTo(articleId, target);
+        if (rows <= 0) {
+            throw new BusinessException(ResultCode.ARTICLE_UPDATE_FAILED);
+        }
+        touchHeat(articleId, delta * 5D);
+        clearArticleCache(articleId);
+    }
+
+    public Double getHeat(Long articleId) {
+        if (stringRedisTemplate == null || articleId == null) {
+            return 0D;
+        }
+        Double heat = stringRedisTemplate.opsForZSet().score(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString());
+        if (heat != null) {
+            return heat;
+        }
+        Article article = articleMapper.selectById(articleId);
+        if (article == null) {
+            return 0D;
+        }
+        double initialHeat = article.getViewCount() * 1D + article.getCommentCount() * 5D + article.getLikeCount() * 4D
+                + article.getFavoriteCount() * 3D + (article.getIsTop() == null ? 0 : article.getIsTop() * 6D)
+                + (article.getIsEssence() == null ? 0 : article.getIsEssence() * 10D);
+        stringRedisTemplate.opsForZSet().add(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString(), initialHeat);
+        return initialHeat;
+    }
+
+    private void validatePublishDTO(ArticlePublishDTO dto) {
+        if (dto == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        if (!StringUtils.hasText(dto.getTitle())) {
+            throw new BusinessException(ResultCode.TITLE_NOT_NULL);
+        }
+        if (!StringUtils.hasText(dto.getContent())) {
+            throw new BusinessException(ResultCode.CONTENT_NOT_NULL);
+        }
+    }
+
+    private void validatePageQuery(ArticlePageQueryDTO queryDTO) {
+        if (queryDTO == null) {
+            throw new BusinessException(ResultCode.PARAM_NULL);
+        }
+        if (queryDTO.getPageNum() == null || queryDTO.getPageNum() < 1) {
+            throw new BusinessException(ResultCode.PARAM_ERROR);
+        }
+        if (queryDTO.getPageSize() == null || queryDTO.getPageSize() < 1) {
+            throw new BusinessException(ResultCode.PARAM_ERROR1);
+        }
+    }
+
+    private void recordView(Long articleId, String viewerKey) {
+        Article article = articleMapper.selectById(articleId);
+        if (article == null) {
+            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
+        }
+        if (stringRedisTemplate == null || !StringUtils.hasText(viewerKey)) {
+            articleMapper.incrementViewCount(articleId);
+            touchHeat(articleId, 1D);
+            clearArticleCache(articleId);
+            return;
+        }
+        String key = RedisKeyConstants.ARTICLE_VIEWED_KEY + articleId + ":" + viewerKey;
+        Boolean firstView = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10, TimeUnit.MINUTES);
+        if (Boolean.TRUE.equals(firstView)) {
+            articleMapper.incrementViewCount(articleId);
+            touchHeat(articleId, 1D);
+            clearArticleCache(articleId);
+        }
+    }
+
+    private void touchHeat(Long articleId, double delta) {
+        if (stringRedisTemplate == null || articleId == null) {
+            return;
+        }
+        stringRedisTemplate.opsForZSet().incrementScore(
+                RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString(), delta);
+        stringRedisTemplate.opsForValue().increment(RedisKeyConstants.ARTICLE_HEAT_KEY + articleId, delta);
+    }
+
+    private List<ArticleListVO> buildArticleListVOs(List<Article> articles, Map<Long, Double> heatMap) {
+        Map<Long, Board> boardCache = new HashMap<>();
+        return articles.stream()
+                .map(article -> ArticleConverter.toArticleListVO(
+                        article,
+                        boardCache.computeIfAbsent(article.getBoardId(), boardMapper::selectById),
+                        heatMap.getOrDefault(article.getId(), 0D)))
+                .toList();
+    }
+
+    private HotArticleSlice getHotArticles(int limit) {
+        if (stringRedisTemplate == null) {
+            List<Article> articles = articleMapper.selectHotList(limit);
+            return new HotArticleSlice(articles, buildHeatMapFromArticles(articles));
+        }
+        return getHotArticlesByPage(0, limit);
+    }
+
+    private HotArticleSlice getHotArticlesByPage(int offset, int pageSize) {
+        if (stringRedisTemplate == null) {
+            List<Article> articles = articleMapper.selectHotPage(offset, pageSize);
+            return new HotArticleSlice(articles, buildHeatMapFromArticles(articles));
+        }
+        ensureHotRankCache(Math.max(2000, offset + pageSize));
+        Set<org.springframework.data.redis.core.ZSetOperations.TypedTuple<String>> hotTuples = stringRedisTemplate.opsForZSet()
+                .reverseRangeWithScores(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, offset, offset + pageSize - 1L);
+        if (hotTuples == null || hotTuples.isEmpty()) {
+            List<Article> articles = articleMapper.selectHotPage(offset, pageSize);
+            return new HotArticleSlice(articles, buildHeatMapFromArticles(articles));
+        }
+        Map<Long, Double> heatMap = new HashMap<>();
+        List<Long> ids = hotTuples.stream()
+                .map(tuple -> {
+                    Long articleId = Long.valueOf(tuple.getValue());
+                    heatMap.put(articleId, tuple.getScore() == null ? 0D : tuple.getScore());
+                    return articleId;
+                })
+                .toList();
+        List<Article> articles = articleMapper.selectByIds(ids);
+        articles.sort((a, b) -> Double.compare(
+                heatMap.getOrDefault(b.getId(), 0D),
+                heatMap.getOrDefault(a.getId(), 0D)));
+        return new HotArticleSlice(articles, heatMap);
+    }
+
+    private void ensureHotRankCache(int warmLimit) {
+        if (stringRedisTemplate == null) {
+            return;
+        }
+        Long size = stringRedisTemplate.opsForZSet().zCard(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY);
+        if (size != null && size >= warmLimit) {
+            return;
+        }
+        List<Article> hotArticles = articleMapper.selectHotList(warmLimit);
+        for (Article article : hotArticles) {
+            double heat = calculateHeat(article);
+            stringRedisTemplate.opsForZSet().add(
+                    RedisKeyConstants.ARTICLE_HEAT_RANK_KEY,
+                    article.getId().toString(),
+                    heat
+            );
+        }
+    }
+
+    private Map<Long, Double> buildHeatMapFromArticles(List<Article> articles) {
+        Map<Long, Double> heatMap = new HashMap<>();
+        for (Article article : articles) {
+            heatMap.put(article.getId(), calculateHeat(article));
+        }
+        return heatMap;
+    }
+
+    private double calculateHeat(Article article) {
+        return article.getViewCount() * 1D
+                + article.getCommentCount() * 5D
+                + article.getLikeCount() * 4D
+                + article.getFavoriteCount() * 3D
+                + (article.getIsTop() == null ? 0 : article.getIsTop() * 6D)
+                + (article.getIsEssence() == null ? 0 : article.getIsEssence() * 10D);
+    }
+
+    private record HotArticleSlice(List<Article> articles, Map<Long, Double> heatMap) {
+    }
+
+    private Article requireArticle(Long articleId) {
+        Article article = articleMapper.selectById(articleId);
+        if (article == null) {
+            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
+        }
+        return article;
+    }
+
+    private String buildSummary(ArticlePublishDTO dto) {
+        if (StringUtils.hasText(dto.getSummary())) {
+            return dto.getSummary();
+        }
+        String content = dto.getContent();
+        if (!StringUtils.hasText(content)) {
+            return null;
+        }
+        return content.length() <= 120 ? content : content.substring(0, 120);
+    }
+
+    private boolean isManager(String role) {
+        return "ADMIN".equals(role) || "MODERATOR".equals(role);
+    }
+
+    private void clearArticleCache(Long articleId) {
+        if (stringRedisTemplate == null) {
+            return;
+        }
+        stringRedisTemplate.delete(ARTICLE_DETAIL_CACHE_KEY + articleId);
+        Set<String> hotKeys = stringRedisTemplate.keys(ARTICLE_HOT_CACHE_KEY + "*");
+        if (hotKeys != null && !hotKeys.isEmpty()) {
+            stringRedisTemplate.delete(hotKeys);
+        }
+    }
+
+    private void syncArticleLikeCount(Long articleId) {
+        Long exactCount = articleLikeMapper.countByArticle(articleId);
+        articleMapper.updateLikeCountTo(articleId, exactCount == null ? 0 : exactCount.intValue());
+    }
+
+    private void syncArticleFavoriteCount(Long articleId) {
+        Long exactCount = articleFavoriteMapper.countByArticle(articleId);
+        articleMapper.updateFavoriteCountTo(articleId, exactCount == null ? 0 : exactCount.intValue());
+    }
+
+    private boolean executeInteractionWithLock(String lockPrefix, Long userId, Long articleId, InteractionAction action) {
+        if (stringRedisTemplate == null) {
+            return action.execute();
+        }
+        String lockKey = lockPrefix + userId + ":" + articleId;
+        String lockValue = RedisLockUtil.tryLockWithRetry(stringRedisTemplate, lockKey, 5, 3, 50);
+        if (!StringUtils.hasText(lockValue)) {
+            return getCurrentState(lockPrefix, userId, articleId);
+        }
+        try {
+            return action.execute();
+        } finally {
+            RedisLockUtil.unlock(stringRedisTemplate, lockKey, lockValue);
+        }
+    }
+
+    private boolean getCurrentState(String lockPrefix, Long userId, Long articleId) {
+        if (Objects.equals(lockPrefix, RedisKeyConstants.LOCK_ARTICLE_LIKE_KEY)) {
+            return hasLiked(userId, articleId);
+        }
+        return hasFavorited(userId, articleId);
     }
 
     private <T> T readCache(String key, Class<T> targetType) {
@@ -176,186 +682,8 @@ public class ArticleService {
         }
     }
 
-    // ==================== 点赞功能 ====================
-
-    /**
-     * 点赞文章
-     * @param userId 用户ID
-     * @param articleId 文章ID
-     * @return 是否点赞成功（true=点赞，false=已点赞过）
-     */
-    public boolean likeArticle(Long userId, Long articleId) {
-        if (userId == null || articleId == null) {
-            throw new BusinessException(ResultCode.PARAM_NULL);
-        }
-        if (stringRedisTemplate == null) {
-            throw new BusinessException(ResultCode.REDIS_NOT_RUNNING);
-        }
-
-        // 检查文章是否存在
-        Article article = articleMapper.selectById(articleId);
-        if (article == null) {
-            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
-        }
-
-        // 检查是否已点赞
-        String likedSetKey = RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId;
-        Boolean isMember = stringRedisTemplate.opsForSet().isMember(likedSetKey, articleId.toString());
-        
-        if (Boolean.TRUE.equals(isMember)) {
-            // 已点赞，取消点赞
-            stringRedisTemplate.opsForSet().remove(likedSetKey, articleId.toString());
-            stringRedisTemplate.opsForValue().decrement(RedisKeyConstants.ARTICLE_LIKES_KEY + articleId);
-            return false;
-        } else {
-            // 未点赞，添加点赞
-            stringRedisTemplate.opsForSet().add(likedSetKey, articleId.toString());
-            stringRedisTemplate.opsForValue().increment(RedisKeyConstants.ARTICLE_LIKES_KEY + articleId);
-            return true;
-        }
-    }
-
-    /**
-     * 获取文章点赞数
-     */
-    public Long getArticleLikes(Long articleId) {
-        if (articleId == null) {
-            return 0L;
-        }
-        if (stringRedisTemplate != null) {
-            String key = RedisKeyConstants.ARTICLE_LIKES_KEY + articleId;
-            String count = stringRedisTemplate.opsForValue().get(key);
-            if (count != null) {
-                return Long.parseLong(count);
-            }
-        }
-        return 0L;
-    }
-
-    /**
-     * 检查用户是否已点赞文章
-     */
-    public boolean hasLiked(Long userId, Long articleId) {
-        if (userId == null || articleId == null || stringRedisTemplate == null) {
-            return false;
-        }
-        String likedSetKey = RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId;
-        Boolean isMember = stringRedisTemplate.opsForSet().isMember(likedSetKey, articleId.toString());
-        return Boolean.TRUE.equals(isMember);
-    }
-
-    // ==================== 浏览量功能 ====================
-
-    /**
-     * 增加文章浏览量（Redis计数）
-     */
-    public void incrementViewCount(Long articleId) {
-        if (articleId == null) {
-            return;
-        }
-        // 更新数据库
-        articleMapper.incrementViewCount(articleId);
-        
-        // 同时更新Redis缓存
-        if (stringRedisTemplate != null) {
-            String key = RedisKeyConstants.ARTICLE_VIEWS_KEY + articleId;
-            stringRedisTemplate.opsForValue().increment(key);
-        }
-    }
-
-    /**
-     * 获取文章浏览量（优先从Redis获取）
-     */
-    public Long getArticleViews(Long articleId) {
-        if (articleId == null) {
-            return 0L;
-        }
-        if (stringRedisTemplate != null) {
-            String key = RedisKeyConstants.ARTICLE_VIEWS_KEY + articleId;
-            String views = stringRedisTemplate.opsForValue().get(key);
-            if (views != null) {
-                return Long.parseLong(views);
-            }
-        }
-        // Redis没有，从数据库获取
-        Article article = articleMapper.selectById(articleId);
-        return article != null && article.getViewCount() != null ? article.getViewCount().longValue() : 0L;
-    }
-
-    // ==================== 分布式锁编辑文章 ====================
-
-    /**
-     * 编辑文章（带分布式锁）
-     */
-    public void editArticle(Long userId, Long articleId, ArticlePublishDTO dto) {
-        if (userId == null || articleId == null || dto == null) {
-            throw new BusinessException(ResultCode.PARAM_NULL);
-        }
-
-        Article article = articleMapper.selectById(articleId);
-        if (article == null) {
-            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
-        }
-
-        // 只有作者才能编辑
-        if (!article.getAuthorId().equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "只能编辑自己的文章");
-        }
-
-        String lockKey = RedisKeyConstants.LOCK_ARTICLE_EDIT_KEY + articleId;
-        String lockValue = null;
-        
-        // 尝试获取分布式锁
-        if (stringRedisTemplate != null) {
-            lockValue = RedisLockUtil.tryLock(stringRedisTemplate, lockKey, RedisKeyConstants.LOCK_EXPIRE);
-            if (lockValue == null) {
-                throw new BusinessException(ResultCode.FAIL.getCode(), "文章正在被其他用户编辑，请稍后再试");
-            }
-        }
-
-        try {
-            // 执行编辑操作
-            article.setTitle(dto.getTitle());
-            article.setContent(dto.getContent());
-            // 这里需要添加update方法
-            // articleMapper.update(article);
-            
-            // 清除文章详情缓存
-            if (stringRedisTemplate != null) {
-                stringRedisTemplate.delete(ARTICLE_DETAIL_CACHE_KEY + articleId);
-            }
-        } finally {
-            // 释放锁
-            if (lockValue != null && stringRedisTemplate != null) {
-                RedisLockUtil.unlock(stringRedisTemplate, lockKey, lockValue);
-            }
-        }
-    }
-
-    /**
-     * 删除文章
-     */
-    public void deleteArticle(Long userId, Long articleId) {
-        if (userId == null || articleId == null) {
-            throw new BusinessException(ResultCode.PARAM_NULL);
-        }
-
-        Article article = articleMapper.selectById(articleId);
-        if (article == null) {
-            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
-        }
-
-        if (!article.getAuthorId().equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "只能删除自己的文章");
-        }
-
-        // 软删除
-        article.setStatus(0);
-        // articleMapper.updateStatus(articleId, 0);
-        
-        // 清除缓存
-        if (stringRedisTemplate != null) {
-            stringRedisTemplate.delete(ARTICLE_DETAIL_CACHE_KEY + articleId);
-        }
+    @FunctionalInterface
+    private interface InteractionAction {
+        boolean execute();
     }
 }

@@ -2,6 +2,8 @@ package com.userservice.vo;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * ClassName:UserInfoVO
  * Package:com.userservice.vo
@@ -23,4 +25,5 @@ public class UserInfoVO {
     private Integer status;
     private String roleCode;
     private String roleName;
+    private List<String> permissionCodes;
 }

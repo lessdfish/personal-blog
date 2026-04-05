@@ -3,6 +3,7 @@ package com.notifyservice.controller;
 import com.blogcommon.result.Result;
 import com.notifyservice.config.UserContext;
 import com.notifyservice.dto.NotifyPageQueryDTO;
+import com.notifyservice.vo.NotifyListItemVO;
 import com.notifyservice.service.NotifyService;
 import com.notifyservice.vo.NotifyVO;
 import com.notifyservice.vo.PageResult;
@@ -31,8 +32,14 @@ public class NotifyController {
 
     @PostMapping("/page")
     @Operation(summary = "分页查询通知", description = "分页查询当前用户的通知列表")
-    public Result<PageResult<NotifyVO>> page(@Valid @RequestBody NotifyPageQueryDTO dto) {
+    public Result<PageResult<NotifyListItemVO>> page(@Valid @RequestBody NotifyPageQueryDTO dto) {
         return Result.success(notifyService.pageByUser(UserContext.getUserId(), dto));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "通知详情", description = "查询单条通知的完整内容")
+    public Result<NotifyVO> detail(@PathVariable("id") Long id) {
+        return Result.success(notifyService.getDetail(UserContext.getUserId(), id));
     }
 
     @GetMapping("/unread/count")

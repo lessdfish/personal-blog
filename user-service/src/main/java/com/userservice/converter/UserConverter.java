@@ -4,6 +4,8 @@ import com.userservice.entity.Role;
 import com.userservice.entity.User;
 import com.userservice.vo.UserInfoVO;
 
+import java.util.List;
+
 /**
  * ClassName:UserConverter
  * Package:com.userservice.converter
@@ -39,6 +41,14 @@ public class UserConverter {
         if (vo != null && role != null) {
             vo.setRoleCode(role.getRoleCode());
             vo.setRoleName(role.getRoleName());
+        }
+        return vo;
+    }
+
+    public static UserInfoVO toUserInfoVO(User user, Role role, List<String> permissionCodes){
+        UserInfoVO vo = toUserInfoVO(user, role);
+        if (vo != null) {
+            vo.setPermissionCodes(permissionCodes);
         }
         return vo;
     }

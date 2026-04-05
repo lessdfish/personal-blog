@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+.m2/
+run-logs/
+**/application-local.yml
+**/application-secrets.yml

@@ -15,16 +15,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * ClassName:CommentTestController
- * Package:com.commentservice.controller
- * Description:
- *
- * @Author:lyp
- * @Create:2026/3/26 - 22:11
- * @Version: v1.0
- *
- */
 @Tag(name = "评论模块")
 @RestController
 @RequestMapping("/comment")
@@ -35,36 +25,32 @@ public class CommentTestController {
 
     @PostMapping
     @Operation(summary = "创建评论", description = "支持文章评论和回复评论")
-    public Result<Long> create(@Valid @RequestBody CommentCreateDTO dto){
-        return Result.success(commentService.create(UserContext.getUserId(),dto));
+    public Result<Long> create(@Valid @RequestBody CommentCreateDTO dto) {
+        return Result.success(commentService.create(UserContext.getUserId(), dto));
     }
-    //文章未找到
 
     @GetMapping("/article/{articleId}")
-    @Operation(summary = "创建评论", description = "支持文章评论和回复评论")
+    @Operation(summary = "查询文章评论")
     public Result<List<CommentVO>> listByArticleId(@PathVariable("articleId") Long articleId) {
         return Result.success(commentService.listByArticleId(articleId));
     }
 
-    @Operation(summary = "分页查询评论", description = "按文章分页查询评论树，返回一级评论及其回复")
     @PostMapping("/page")
+    @Operation(summary = "分页查询评论树")
     public Result<PageResult<CommentVO>> page(@Valid @RequestBody CommentPageQueryDTO dto) {
         return Result.success(commentService.pageByArticle(dto));
     }
 
     @DeleteMapping("/{id}")
-    @Operation(summary = "删除评论", description = "根据id删除评论")
-    public Result<Void> delete(@PathVariable("id") Long id){
-        commentService.delete(UserContext.getUserId(),id);
+    @Operation(summary = "删除评论", description = "作者可删自己的评论，管理员和版主可删任意评论")
+    public Result<Void> delete(@PathVariable("id") Long id) {
+        commentService.delete(UserContext.getUserId(), UserContext.getRole(), id);
         return Result.success();
     }
 
-    // ==================== 限流功能 ====================
-
     @GetMapping("/rate-limit/remaining")
-    @Operation(summary = "获取剩余评论次数", description = "获取当前用户在限流窗口内的剩余评论次数")
+    @Operation(summary = "剩余评论次数")
     public Result<Integer> getRemainingComments() {
-        Long userId = UserContext.getUserId();
-        return Result.success(commentService.getRemainingComments(userId));
+        return Result.success(commentService.getRemainingComments(UserContext.getUserId()));
     }
 }

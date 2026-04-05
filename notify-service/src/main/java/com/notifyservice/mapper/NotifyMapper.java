@@ -1,6 +1,7 @@
 package com.notifyservice.mapper;
 
 import com.notifyservice.entity.Notify;
+import com.notifyservice.vo.NotifyListItemVO;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
@@ -25,14 +26,15 @@ public interface NotifyMapper {
     int insert(Notify notify);
 
     @Select("""
-        select * from tb_notify
+        select id, type, title, article_id, comment_id, sender_id, is_read, create_time
+        from tb_notify force index(idx_notify_user_page_cover)
         where user_id = #{userId}
-        order by create_time desc
+        order by create_time desc, id desc
         limit #{offset}, #{pageSize}
         """)
-    List<Notify> selectByUserId(@Param("userId") Long userId,
-                                @Param("offset") Integer offset,
-                                @Param("pageSize") Integer pageSize);
+    List<NotifyListItemVO> selectSummaryByUserId(@Param("userId") Long userId,
+                                                 @Param("offset") Integer offset,
+                                                 @Param("pageSize") Integer pageSize);
 
     @Select("select count(*) from tb_notify where user_id = #{userId}")
     Long countByUserId(Long userId);
@@ -42,6 +44,13 @@ public interface NotifyMapper {
 
     @Select("select * from tb_notify where id = #{id}")
     Notify selectById(Long id);
+
+    @Select("""
+        select * from tb_notify
+        where id = #{id} and user_id = #{userId}
+        limit 1
+        """)
+    Notify selectByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
     @Update("update tb_notify set is_read = 1 where id = #{id} and user_id = #{userId}")
     int markAsRead(@Param("id") Long id, @Param("userId") Long userId);

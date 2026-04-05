@@ -5,33 +5,45 @@ spring:
   application:
     name: blog-gateway
   cloud:
-    nacos:
-      server-addr: 127.0.0.1:8848
     gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
       routes:
         - id: user-service
-          uri: lb://user-service
+          uri: ${gateway.routes.user-service-uri:http://127.0.0.1:9011}
           predicates:
             - Path=/api/user/**
           filters:
             - StripPrefix=1
 
         - id: article-service
-          uri: lb://article-service
+          uri: ${gateway.routes.article-service-uri:http://127.0.0.1:9020}
           predicates:
             - Path=/api/article/**
           filters:
             - StripPrefix=1
 
         - id: comment-service
-          uri: lb://comment-service
+          uri: ${gateway.routes.comment-service-uri:http://127.0.0.1:9003}
           predicates:
             - Path=/api/comment/**
           filters:
             - StripPrefix=1
 
         - id: notify-service
-          uri: lb://notify-service
+          uri: ${gateway.routes.notify-service-uri:http://127.0.0.1:9004}
           predicates:
             - Path=/api/notify/**
           filters:
@@ -39,5 +51,10 @@ spring:
 
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+
+logging:
+  level:
+    org.springframework.cloud.gateway: info
+    com.bloggateway: info

@@ -24,8 +24,8 @@ public interface UserMapper {
     User selectByUsername(String username);
 
     @Insert("""
-            insert into tb_user(username, password, nickname, email, phone, status)
-            values(#{username}, #{password}, #{nickname}, #{email}, #{phone}, #{status})
+            insert into tb_user(username, password, nickname, email, phone, status, role_id)
+            values(#{username}, #{password}, #{nickname}, #{email}, #{phone}, #{status}, #{roleId})
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(User user);
@@ -62,6 +62,13 @@ public interface UserMapper {
         where id = #{userId}
         """)
     int updateUserStatus(@Param("userId") Long userId, @Param("status") Integer status);
+
+    @Update("""
+        update tb_user
+        set role_id = #{roleId}
+        where id = #{userId}
+        """)
+    int updateUserRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
 
     @Select("""
         <script>

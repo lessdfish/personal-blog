@@ -100,4 +100,10 @@ public interface CommentMapper {
         where id = #{id} and user_id = #{userId}
         """)
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    @Delete("""
+        delete from tb_comment
+        where id = #{id}
+        """)
+    int deleteById(@Param("id") Long id);
 }

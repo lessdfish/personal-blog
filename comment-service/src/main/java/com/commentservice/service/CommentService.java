@@ -19,24 +19,29 @@ import com.commentservice.vo.PageResult;
 import com.commentservice.vo.UserSimpleVO;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * ClassName:CommentService
- * Package:com.commentservice.service
- * Description:评论服务层
- *
- * @Author:lyp
- * @Create:2026/3/31 - 23:37
- * @Version: v1.0
- */
 @Service
 public class CommentService {
+    @Value("${comment.rate-limit.enabled:true}")
+    private boolean rateLimitEnabled;
+    @Value("${comment.rate-limit.window-seconds:60}")
+    private long rateLimitWindowSeconds;
+    @Value("${comment.rate-limit.threshold:10}")
+    private int rateLimitThreshold;
+
     @Autowired
     private CommentMapper commentMapper;
     @Autowired
@@ -48,44 +53,38 @@ public class CommentService {
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
 
-    /**
-     * 创建评论
-     */
     public Long create(Long userId, CommentCreateDTO dto) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-
-        // 评论限流检查
         checkRateLimit(userId);
 
         ArticleSimpleVO article = getArticleOrThrow(dto.getArticleId());
+        if (article.getAllowComment() != null && article.getAllowComment() == 0) {
+            throw new BusinessException(ResultCode.ARTICLE_COMMENT_CLOSED);
+        }
 
         Long notifyUserId;
         if (dto.getParentId() == null) {
-            // 一级评论，通知文章作者
             notifyUserId = article.getAuthorId();
         } else {
-            // 回复评论，通知父评论作者
             Comment parent = commentMapper.selectById(dto.getParentId());
             if (parent == null) {
                 throw new BusinessException(ResultCode.COMMENT_NOT_FOUND);
             }
-            // 父评论必须属于当前文章
             if (!Objects.equals(parent.getArticleId(), dto.getArticleId())) {
                 throw new BusinessException(ResultCode.PARAM_ERROR);
             }
             notifyUserId = parent.getUserId();
         }
-        
-        Comment comment = CommentConverter.toEntity(userId, dto);
-        comment.setNotifyUserId(notifyUserId);  // 设置被通知用户ID
 
+        Comment comment = CommentConverter.toEntity(userId, dto);
+        comment.setNotifyUserId(notifyUserId);
         if (commentMapper.insert(comment) <= 0) {
             throw new BusinessException(ResultCode.COMMENT_CREATE_FAILED);
         }
+        syncArticleCommentCount(dto.getArticleId(), 1);
 
-        // 发送通知（不通知自己）
         if (!Objects.equals(userId, notifyUserId)) {
             CommentNotifyMessage message = new CommentNotifyMessage();
             message.setArticleId(dto.getArticleId());
@@ -94,7 +93,6 @@ public class CommentService {
             message.setReceiverId(notifyUserId);
             message.setArticleTitle(article.getTitle());
             message.setContent(dto.getContent());
-
             rabbitTemplate.convertAndSend(
                     MqConstants.COMMENT_NOTIFY_EXCHANGE,
                     MqConstants.COMMENT_NOTIFY_ROUTING_KEY,
@@ -104,14 +102,10 @@ public class CommentService {
         return comment.getId();
     }
 
-    /**
-     * 分页查询评论
-     */
     public PageResult<CommentVO> pageByArticle(CommentPageQueryDTO dto) {
         Long articleId = dto.getArticleId();
         int pageNum = dto.getPageNum() == null || dto.getPageNum() < 1 ? 1 : dto.getPageNum();
         int pageSize = dto.getPageSize() == null || dto.getPageSize() < 1 ? 10 : dto.getPageSize();
-
         int offset = (pageNum - 1) * pageSize;
 
         Long total = commentMapper.countRootCommentsByArticleId(articleId);
@@ -131,32 +125,22 @@ public class CommentService {
         }
 
         List<Long> rootIds = roots.stream().map(Comment::getId).toList();
-
         List<Comment> children = commentMapper.selectChildrenByParentIds(articleId, rootIds);
         if (children == null) {
             children = Collections.emptyList();
         }
 
-        // 收集所有涉及到的用户id
         Set<Long> userIds = new HashSet<>();
         for (Comment root : roots) {
             userIds.add(root.getUserId());
-            if (root.getNotifyUserId() != null) {
-                userIds.add(root.getNotifyUserId());
-            }
+            userIds.add(root.getNotifyUserId());
         }
         for (Comment child : children) {
             userIds.add(child.getUserId());
-            if (child.getNotifyUserId() != null) {
-                userIds.add(child.getNotifyUserId());
-            }
+            userIds.add(child.getNotifyUserId());
         }
-
         Map<Long, UserSimpleVO> userMap = getUserMap(userIds);
-
-        // parentId -> children
-        Map<Long, List<Comment>> childrenMap = children.stream()
-                .collect(Collectors.groupingBy(Comment::getParentId));
+        Map<Long, List<Comment>> childrenMap = children.stream().collect(Collectors.groupingBy(Comment::getParentId));
 
         List<CommentVO> rootVOs = roots.stream()
                 .map(root -> buildRootVO(root, childrenMap, userMap))
@@ -168,133 +152,84 @@ public class CommentService {
         return result;
     }
 
-    /**
-     * 根据文章ID查询所有评论
-     */
     public List<CommentVO> listByArticleId(Long articleId) {
         List<Comment> comments = commentMapper.selectByArticleId(articleId);
         if (comments == null || comments.isEmpty()) {
             return Collections.emptyList();
         }
-
-        // 收集所有用户ID
         Set<Long> userIds = new HashSet<>();
         for (Comment comment : comments) {
             userIds.add(comment.getUserId());
-            if (comment.getNotifyUserId() != null) {
-                userIds.add(comment.getNotifyUserId());
-            }
+            userIds.add(comment.getNotifyUserId());
         }
-
-        // 批量获取用户信息
         Map<Long, UserSimpleVO> userMap = getUserMap(userIds);
 
-        return comments.stream()
-                .map(comment -> {
-                    CommentVO vo = CommentConverter.toVO(comment);
-                    // 填充用户信息
-                    UserSimpleVO user = userMap.get(comment.getUserId());
-                    if (user != null) {
-                        vo.setUserName(user.getName());
-                        vo.setUserAvatar(user.getAvatar());
-                    }
-                    UserSimpleVO notifyUser = userMap.get(comment.getNotifyUserId());
-                    if (notifyUser != null) {
-                        vo.setNotifyUserName(notifyUser.getName());
-                    }
-                    return vo;
-                })
-                .toList();
+        return comments.stream().map(comment -> toBaseVO(comment, userMap)).toList();
     }
 
-    /**
-     * 删除评论（只能删除自己的评论）
-     */
-    public void delete(Long userId, Long id) {
+    public void delete(Long userId, String role, Long id) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        if (commentMapper.deleteByIdAndUserId(id, userId) <= 0) {
+        Comment comment = commentMapper.selectById(id);
+        if (comment == null) {
+            throw new BusinessException(ResultCode.COMMENT_NOT_FOUND);
+        }
+        boolean isManager = "ADMIN".equals(role) || "MODERATOR".equals(role);
+        int rows = isManager ? commentMapper.deleteById(id) : commentMapper.deleteByIdAndUserId(id, userId);
+        if (rows <= 0) {
             throw new BusinessException(ResultCode.COMMENT_DELETE_FAILED);
         }
+        syncArticleCommentCount(comment.getArticleId(), -1);
     }
 
-    // ==================== 私有方法 ====================
-
-    /**
-     * 获取文章信息，如果不存在则抛出异常
-     * 同时检查 Result 的 code 是否为成功状态
-     */
     private ArticleSimpleVO getArticleOrThrow(Long articleId) {
         if (articleId == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
         }
-        
         Result<ArticleSimpleVO> result;
         try {
             result = articleClient.getSimpleById(articleId);
         } catch (Exception e) {
-            // Feign 调用失败（如 article-service 未启动）
-            throw new BusinessException(ResultCode.FAIL.getCode(), 
-                    "无法获取文章信息，请确保 article-service 已启动。错误: " + e.getMessage());
+            throw new BusinessException(ResultCode.ARTICLE_NOT_FOUND.getCode(), "无法获取帖子信息: " + e.getMessage());
         }
-        
-        if (result == null) {
-            throw new BusinessException(ResultCode.FAIL.getCode(), "文章服务返回空响应");
-        }
-        
-        // 检查响应状态码
-        if (result.getCode() == null || result.getCode() != 200) {
-            String message = result.getMessage() != null ? result.getMessage() : "文章不存在";
-            throw new BusinessException(ResultCode.ARTICLE_NOT_FOUND.getCode(), message);
-        }
-        
-        if (result.getData() == null) {
+        if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
             throw new BusinessException(ResultCode.ARTICLE_NOT_FOUND);
         }
-        
         return result.getData();
     }
 
-    private Map<Long, UserSimpleVO> getUserMap(Collection<Long> userIds) {
-        List<Long> ids = userIds.stream()
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
+    private void syncArticleCommentCount(Long articleId, Integer delta) {
+        try {
+            articleClient.updateCommentCount(articleId, delta);
+        } catch (Exception ignored) {
+        }
+    }
 
+    private Map<Long, UserSimpleVO> getUserMap(Collection<Long> userIds) {
+        List<Long> ids = userIds.stream().filter(Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) {
             return Collections.emptyMap();
         }
-
         Result<List<UserSimpleVO>> result = userClient.getBatchUserSimple(ids);
         if (result == null || result.getData() == null || result.getData().isEmpty()) {
             return Collections.emptyMap();
         }
-
-        return result.getData().stream()
-                .collect(Collectors.toMap(UserSimpleVO::getId, user -> user));
+        return result.getData().stream().collect(Collectors.toMap(UserSimpleVO::getId, user -> user));
     }
 
-    private CommentVO buildRootVO(Comment root,
-                                  Map<Long, List<Comment>> childrenMap,
-                                  Map<Long, UserSimpleVO> userMap) {
+    private CommentVO buildRootVO(Comment root, Map<Long, List<Comment>> childrenMap, Map<Long, UserSimpleVO> userMap) {
         CommentVO vo = toBaseVO(root, userMap);
-
         List<Comment> childComments = childrenMap.get(root.getId());
         if (childComments == null || childComments.isEmpty()) {
             vo.setChildren(Collections.emptyList());
             return vo;
         }
-
-        List<CommentVO> childVOs = childComments.stream()
-                .map(child -> {
-                    CommentVO childVO = toBaseVO(child, userMap);
-                    childVO.setChildren(Collections.emptyList());
-                    return childVO;
-                })
-                .toList();
-
-        vo.setChildren(childVOs);
+        vo.setChildren(childComments.stream().map(child -> {
+            CommentVO childVO = toBaseVO(child, userMap);
+            childVO.setChildren(Collections.emptyList());
+            return childVO;
+        }).toList());
         return vo;
     }
 
@@ -313,57 +248,39 @@ public class CommentService {
             vo.setUserName(user.getName());
             vo.setUserAvatar(user.getAvatar());
         }
-
         UserSimpleVO notifyUser = userMap.get(comment.getNotifyUserId());
         if (notifyUser != null) {
             vo.setNotifyUserName(notifyUser.getName());
         }
-
         return vo;
     }
 
-    // ==================== 限流功能 ====================
-
-    /**
-     * 评论限流检查
-     * 每个用户每分钟最多发表 LIMIT_COMMENT_THRESHOLD 条评论
-     */
     private void checkRateLimit(Long userId) {
-        if (stringRedisTemplate == null || userId == null) {
-            return; // Redis未启用，不限流
+        if (!rateLimitEnabled || stringRedisTemplate == null || userId == null) {
+            return;
         }
-
         String key = RedisKeyConstants.LIMIT_COMMENT_KEY + userId;
         String countStr = stringRedisTemplate.opsForValue().get(key);
-
         int count = countStr != null ? Integer.parseInt(countStr) : 0;
-
-        if (count >= RedisKeyConstants.LIMIT_COMMENT_THRESHOLD) {
-            throw new BusinessException(ResultCode.FAIL.getCode(),
-                    "评论太频繁，请" + RedisKeyConstants.LIMIT_COMMENT_WINDOW + "秒后再试");
+        if (count >= rateLimitThreshold) {
+            throw new BusinessException(ResultCode.COMMENT_RATE_LIMIT.getCode(),
+                    "评论过于频繁，请" + rateLimitWindowSeconds + "秒后再试");
         }
-
-        // 增加计数
         if (count == 0) {
-            // 第一次，设置key并设置过期时间
-            stringRedisTemplate.opsForValue().set(key, "1",
-                    RedisKeyConstants.LIMIT_COMMENT_WINDOW, TimeUnit.SECONDS);
+            stringRedisTemplate.opsForValue().set(
+                    key, "1", rateLimitWindowSeconds, TimeUnit.SECONDS);
         } else {
-            // 已有计数，自增
             stringRedisTemplate.opsForValue().increment(key);
         }
     }
 
-    /**
-     * 获取用户剩余评论次数
-     */
     public int getRemainingComments(Long userId) {
         if (stringRedisTemplate == null || userId == null) {
-            return RedisKeyConstants.LIMIT_COMMENT_THRESHOLD;
+            return rateLimitThreshold;
         }
         String key = RedisKeyConstants.LIMIT_COMMENT_KEY + userId;
         String countStr = stringRedisTemplate.opsForValue().get(key);
         int count = countStr != null ? Integer.parseInt(countStr) : 0;
-        return Math.max(0, RedisKeyConstants.LIMIT_COMMENT_THRESHOLD - count);
+        return Math.max(0, rateLimitThreshold - count);
     }
 }

@@ -8,6 +8,7 @@ import com.notifyservice.config.UserContext;
 import com.notifyservice.dto.NotifyPageQueryDTO;
 import com.notifyservice.entity.Notify;
 import com.notifyservice.mapper.NotifyMapper;
+import com.notifyservice.vo.NotifyListItemVO;
 import com.notifyservice.vo.NotifyVO;
 import com.notifyservice.vo.PageResult;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,7 +91,7 @@ public class NotifyService {
     /**
      * 分页查询当前用户的通知列表
      */
-    public PageResult<NotifyVO> pageByUser(Long userId, NotifyPageQueryDTO dto) {
+    public PageResult<NotifyListItemVO> pageByUser(Long userId, NotifyPageQueryDTO dto) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
@@ -101,21 +102,29 @@ public class NotifyService {
 
         Long total = notifyMapper.countByUserId(userId);
         if (total == null || total == 0) {
-            PageResult<NotifyVO> empty = new PageResult<>();
+            PageResult<NotifyListItemVO> empty = new PageResult<>();
             empty.setTotal(0L);
             empty.setList(Collections.emptyList());
             return empty;
         }
 
-        List<Notify> notifies = notifyMapper.selectByUserId(userId, offset, pageSize);
-        List<NotifyVO> voList = notifies.stream()
-                .map(this::toVO)
-                .toList();
+        List<NotifyListItemVO> voList = notifyMapper.selectSummaryByUserId(userId, offset, pageSize);
 
-        PageResult<NotifyVO> result = new PageResult<>();
+        PageResult<NotifyListItemVO> result = new PageResult<>();
         result.setTotal(total);
         result.setList(voList);
         return result;
+    }
+
+    public NotifyVO getDetail(Long userId, Long notifyId) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        Notify notify = notifyMapper.selectByIdAndUserId(notifyId, userId);
+        if (notify == null) {
+            throw new BusinessException(ResultCode.NOTIFY_NOT_FOUND);
+        }
+        return toVO(notify);
     }
 
     /**

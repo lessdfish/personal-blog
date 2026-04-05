@@ -1,0 +1,13 @@
+gateway:
+  routes:
+    user-service-uri: http://127.0.0.1:9011
+    article-service-uri: http://127.0.0.1:9020
+    comment-service-uri: http://127.0.0.1:9003
+    notify-service-uri: http://127.0.0.1:9004
+
+spring:
+  cloud:
+    nacos:
+      config:
+        import-check:
+          enabled: false

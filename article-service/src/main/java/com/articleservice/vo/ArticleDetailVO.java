@@ -4,23 +4,24 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/**
- * ClassName:ArticleDetailVO
- * Package:com.articleservice.vo
- * Description:
- *
- * @Author:lyp
- * @Create:2026/3/30 - 23:52
- * @Version: v1.0
- *
- */
 @Data
 public class ArticleDetailVO {
     private Long id;
     private String title;
+    private String summary;
     private String content;
     private Long authorId;
+    private Long boardId;
+    private String boardName;
+    private String tags;
     private Integer viewCount;
+    private Integer commentCount;
+    private Integer likeCount;
+    private Integer favoriteCount;
+    private Integer isTop;
+    private Integer isEssence;
+    private Integer allowComment;
+    private Double heatScore;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

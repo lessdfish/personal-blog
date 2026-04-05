@@ -11,7 +11,7 @@ services:
     image: rabbitmq:3-management
     container_name: blog-rabbitmq
     ports:
-      - "5672:5672"
+      - "35672:5672"
       - "15672:15672"
 
   nacos:
@@ -22,3 +22,16 @@ services:
       PREFER_HOST_MODE: hostname
     ports:
       - "8848:8848"
+
+  k6:
+    image: grafana/k6:latest
+    container_name: blog-k6
+    profiles:
+      - tools
+    working_dir: /scripts
+    volumes:
+      - ./pressure-test:/scripts
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    entrypoint:
+      - k6
