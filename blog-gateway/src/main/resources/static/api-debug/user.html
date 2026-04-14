@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User 调试</title>
+  <link rel="stylesheet" href="/api-debug/style.css" />
+  <script src="/api-debug/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div>
+      <h1>User 接口调试</h1>
+      <div class="hint">建议先注册或登录，登录成功后浏览器会自动写入 HttpOnly Cookie。</div>
+    </div>
+    <div class="nav">
+      <a href="/api-debug/index.html">首页</a>
+      <a href="/api-debug/article.html">Article</a>
+      <a href="/api-debug/comment.html">Comment</a>
+      <a href="/api-debug/notify.html">Notify</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>注册</h3>
+      <label>用户名<input id="regUsername" value="webuser01" /></label>
+      <label>密码<input id="regPassword" value="pass123" /></label>
+      <label>昵称<input id="regNickname" value="网页调试用户" /></label>
+      <label>邮箱<input id="regEmail" value="webuser01@test.com" /></label>
+      <label>手机号<input id="regPhone" value="13900000031" /></label>
+      <button onclick="runAction('userResult', () => ({ method: 'POST', url: '/api/user/register', body: { username: readInput('regUsername'), password: readInput('regPassword'), nickname: readInput('regNickname'), email: readInput('regEmail'), phone: readInput('regPhone') } }))">调用注册</button>
+    </div>
+
+    <div class="card">
+      <h3>登录</h3>
+      <label>用户名<input id="loginUsername" value="tomuser" /></label>
+      <label>密码<input id="loginPassword" value="password" /></label>
+      <button onclick="runAction('userResult', () => ({ method: 'POST', url: '/api/user/login', body: { username: readInput('loginUsername'), password: readInput('loginPassword') } }), handleLoginSuccess)">调用登录</button>
+      <button class="secondary" onclick="syncLoginState()">刷新登录状态</button>
+      <div class="hint">token 改为保存在 HttpOnly Cookie，中间件和前端页面都不再明文展示。</div>
+      <div class="login-state">
+        <div class="login-state__status" data-login-status>未登录</div>
+        <div class="login-state__user" data-login-user hidden>
+          <img data-login-avatar alt="avatar" />
+          <button type="button" class="link-btn" data-login-username>未命名用户</button>
+          <span data-login-nickname hidden></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>受保护接口</h3>
+      <button onclick="runAction('userResult', () => ({ method: 'GET', url: '/api/user/me' }))">当前用户</button>
+      <button onclick="runAction('userResult', () => ({ method: 'GET', url: '/api/user/context' }))">用户上下文</button>
+      <button onclick="runAction('userResult', () => ({ method: 'POST', url: '/api/user/logout' }), () => { setLoginUser(null); })">退出登录</button>
+      <button class="secondary" onclick="runAction('userResult', () => ({ method: 'GET', url: '/api/user/me' }))">校验登录态</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>返回值</h3>
+    <pre id="userResult">{}</pre>
+  </div>
+</div>
+</body>
+</html>

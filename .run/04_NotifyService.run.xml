@@ -1,0 +1,25 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="04 NotifyService" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <option name="ACTIVE_PROFILES" value="test" />
+    <envs>
+      <env name="MYSQL_TEST_URL" value="jdbc:mysql://127.0.0.1:3306/blog_cloud_test?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=Asia/Shanghai" />
+      <env name="MYSQL_TEST_USERNAME" value="root" />
+      <env name="MYSQL_TEST_PASSWORD" value="032581" />
+      <env name="MYSQL_URL" value="jdbc:mysql://127.0.0.1:3306/blog_cloud_test?useUnicode=true&amp;characterEncoding=utf-8&amp;serverTimezone=Asia/Shanghai" />
+      <env name="MYSQL_USERNAME" value="root" />
+      <env name="MYSQL_PASSWORD" value="032581" />
+      <env name="REDIS_HOST" value="127.0.0.1" />
+      <env name="REDIS_PORT" value="6379" />
+      <env name="RABBITMQ_HOST" value="127.0.0.1" />
+      <env name="RABBITMQ_PORT" value="35672" />
+      <env name="RABBITMQ_USERNAME" value="guest" />
+      <env name="RABBITMQ_PASSWORD" value="guest" />
+      <env name="NACOS_SERVER_ADDR" value="127.0.0.1:8848" />
+    </envs>
+    <module name="notify-service" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.notifyservice.NotifyServiceApplication" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

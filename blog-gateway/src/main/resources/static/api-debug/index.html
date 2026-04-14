@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>接口调试入口</title>
+  <link rel="stylesheet" href="/api-debug/style.css" />
+  <script src="/api-debug/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div>
+      <h1>博客论坛接口调试页</h1>
+      <div class="hint">用途：不做正式界面，只验证每个按钮点下去之后的 JSON 返回值。</div>
+    </div>
+    <div class="nav">
+      <a href="/api-debug/user.html">User</a>
+      <a href="/api-debug/article.html">Article</a>
+      <a href="/api-debug/comment.html">Comment</a>
+      <a href="/api-debug/notify.html">Notify</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>当前登录状态</h2>
+    <div class="hint">认证信息通过 HttpOnly Cookie 自动携带，页面不展示 token。</div>
+    <div class="login-state__status" data-login-status>未登录</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>User 调试</h3>
+      <p>验证注册、登录、当前用户、退出登录。</p>
+      <a href="/api-debug/user.html">进入 User 页面</a>
+    </div>
+    <div class="card">
+      <h3>Article 调试</h3>
+      <p>验证分页、详情、发帖、点赞、收藏、热度。</p>
+      <a href="/api-debug/article.html">进入 Article 页面</a>
+    </div>
+    <div class="card">
+      <h3>Comment 调试</h3>
+      <p>验证评论创建、评论分页、剩余额度。</p>
+      <a href="/api-debug/comment.html">进入 Comment 页面</a>
+    </div>
+    <div class="card">
+      <h3>Notify 调试</h3>
+      <p>验证通知分页、未读数、全部已读。</p>
+      <a href="/api-debug/notify.html">进入 Notify 页面</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

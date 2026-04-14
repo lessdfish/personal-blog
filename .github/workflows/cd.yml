@@ -1,0 +1,74 @@
+name: blog-cloud-cd
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Package
+        run: mvn -B -DskipTests package
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-bundle
+          path: |
+            deploy/**
+            user-service/target/user-service-1.0-SNAPSHOT.jar
+            article-service/target/article-service-1.0-SNAPSHOT.jar
+            comment-service/target/comment-service-1.0-SNAPSHOT.jar
+            notify-service/target/notify-service-1.0-SNAPSHOT.jar
+            blog-gateway/target/blog-gateway-1.0-SNAPSHOT.jar
+
+      - name: Upload Jars And Scripts To Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          source: "user-service/target/user-service-1.0-SNAPSHOT.jar,article-service/target/article-service-1.0-SNAPSHOT.jar,comment-service/target/comment-service-1.0-SNAPSHOT.jar,notify-service/target/notify-service-1.0-SNAPSHOT.jar,blog-gateway/target/blog-gateway-1.0-SNAPSHOT.jar,deploy/restart-services.sh,deploy/post-deploy-check.sh"
+          target: "/opt/blog-cloud/releases/${{ github.run_number }}"
+          overwrite: true
+
+      - name: Restart Services And Run Checks
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          script: |
+            set -e
+            RELEASE_DIR=/opt/blog-cloud/releases/${{ github.run_number }}
+            APP_HOME=/opt/blog-cloud
+            mkdir -p "$APP_HOME/logs" "$APP_HOME/backup"
+            cp "$APP_HOME/user-service.jar" "$APP_HOME/backup/user-service.jar.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+            cp "$APP_HOME/article-service.jar" "$APP_HOME/backup/article-service.jar.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+            cp "$APP_HOME/comment-service.jar" "$APP_HOME/backup/comment-service.jar.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+            cp "$APP_HOME/notify-service.jar" "$APP_HOME/backup/notify-service.jar.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+            cp "$APP_HOME/blog-gateway.jar" "$APP_HOME/backup/blog-gateway.jar.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+            cp "$RELEASE_DIR"/user-service/target/user-service-1.0-SNAPSHOT.jar "$APP_HOME/user-service.jar"
+            cp "$RELEASE_DIR"/article-service/target/article-service-1.0-SNAPSHOT.jar "$APP_HOME/article-service.jar"
+            cp "$RELEASE_DIR"/comment-service/target/comment-service-1.0-SNAPSHOT.jar "$APP_HOME/comment-service.jar"
+            cp "$RELEASE_DIR"/notify-service/target/notify-service-1.0-SNAPSHOT.jar "$APP_HOME/notify-service.jar"
+            cp "$RELEASE_DIR"/blog-gateway/target/blog-gateway-1.0-SNAPSHOT.jar "$APP_HOME/blog-gateway.jar"
+            cp "$RELEASE_DIR"/deploy/restart-services.sh "$APP_HOME/restart-services.sh"
+            cp "$RELEASE_DIR"/deploy/post-deploy-check.sh "$APP_HOME/post-deploy-check.sh"
+            chmod +x "$APP_HOME/restart-services.sh" "$APP_HOME/post-deploy-check.sh"
+            bash "$APP_HOME/restart-services.sh"
+            sleep 20
+            bash "$APP_HOME/post-deploy-check.sh" "http://127.0.0.1:8080"

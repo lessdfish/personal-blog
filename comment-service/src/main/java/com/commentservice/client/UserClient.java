@@ -18,7 +18,7 @@ import java.util.List;
  * @Create:2026/4/1 - 00:18
  * @Version: v1.0
  */
-@FeignClient(name = "user-service", url = "${feign.user-service.url}", configuration = FeignConfig.class)
+@FeignClient(name = "user-service", configuration = FeignConfig.class)
 public interface UserClient {
     
     /**

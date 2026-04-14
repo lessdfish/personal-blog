@@ -65,6 +65,7 @@ public class CommentService {
         }
 
         Long notifyUserId;
+        Long normalizedParentId = null;
         if (dto.getParentId() == null) {
             notifyUserId = article.getAuthorId();
         } else {
@@ -76,9 +77,11 @@ public class CommentService {
                 throw new BusinessException(ResultCode.PARAM_ERROR);
             }
             notifyUserId = parent.getUserId();
+            normalizedParentId = parent.getParentId() == null ? parent.getId() : parent.getParentId();
         }
 
         Comment comment = CommentConverter.toEntity(userId, dto);
+        comment.setParentId(normalizedParentId);
         comment.setNotifyUserId(notifyUserId);
         if (commentMapper.insert(comment) <= 0) {
             throw new BusinessException(ResultCode.COMMENT_CREATE_FAILED);

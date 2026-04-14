@@ -1,0 +1,124 @@
+body {
+  font-family: "Microsoft YaHei", sans-serif;
+  margin: 0;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.nav a {
+  margin-right: 12px;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+label {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+input, textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+button {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 8px;
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #475569;
+}
+
+pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px;
+  border-radius: 10px;
+  overflow: auto;
+  min-height: 180px;
+}
+
+.hint {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.login-state {
+  margin-top: 10px;
+}
+
+.login-state__status {
+  font-size: 14px;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.login-state__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.login-state__user img {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: #e2e8f0;
+}
+
+.link-btn {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comment 调试</title>
+  <link rel="stylesheet" href="/api-debug/style.css" />
+  <script src="/api-debug/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div>
+      <h1>Comment 接口调试</h1>
+      <div class="hint">评论创建和剩余额度需要先登录。</div>
+    </div>
+    <div class="nav">
+      <a href="/api-debug/index.html">首页</a>
+      <a href="/api-debug/user.html">User</a>
+      <a href="/api-debug/article.html">Article</a>
+      <a href="/api-debug/notify.html">Notify</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>评论列表</h3>
+      <label>文章ID<input id="commentArticleId" value="1" /></label>
+      <button onclick="runAction('commentResult', () => ({ method: 'GET', url: '/api/comment/article/' + readInput('commentArticleId', '1') }))">列表查询</button>
+      <button onclick="runAction('commentResult', () => ({ method: 'POST', url: '/api/comment/page', body: { articleId: Number(readInput('commentArticleId', '1')), pageNum: 1, pageSize: 10 } }))">树形分页</button>
+    </div>
+
+    <div class="card">
+      <h3>创建评论</h3>
+      <label>文章ID<input id="commentCreateArticleId" value="1" /></label>
+      <label>父评论ID<input id="commentParentId" placeholder="留空表示一级评论" /></label>
+      <label>内容<textarea id="commentContent">debug comment from static page</textarea></label>
+      <div class="hint">说明：这里既可以填一级评论 ID，也可以填二级评论 ID。回复二级评论时，后端会自动挂回对应一级评论下面，形成同级回复。</div>
+      <button onclick="runAction('commentResult', () => { const parentId = readInput('commentParentId'); return { method: 'POST', url: '/api/comment', body: { articleId: Number(readInput('commentCreateArticleId', '1')), parentId: parentId ? Number(parentId) : null, content: readInput('commentContent') } }; })">创建评论</button>
+      <button class="secondary" onclick="runAction('commentResult', () => ({ method: 'GET', url: '/api/comment/rate-limit/remaining' }))">剩余评论次数</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>返回值</h3>
+    <pre id="commentResult">{}</pre>
+  </div>
+</div>
+</body>
+</html>

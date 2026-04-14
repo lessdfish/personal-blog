@@ -55,6 +55,8 @@ public class ArticleService {
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private ArticleAsyncService articleAsyncService;
 
     public void publish(Long authorId, ArticlePublishDTO dto) {
         if (authorId == null) {
@@ -559,15 +561,7 @@ public class ArticleService {
         if (size != null && size >= warmLimit) {
             return;
         }
-        List<Article> hotArticles = articleMapper.selectHotList(warmLimit);
-        for (Article article : hotArticles) {
-            double heat = calculateHeat(article);
-            stringRedisTemplate.opsForZSet().add(
-                    RedisKeyConstants.ARTICLE_HEAT_RANK_KEY,
-                    article.getId().toString(),
-                    heat
-            );
-        }
+        articleAsyncService.warmHotRankCache(warmLimit);
     }
 
     private Map<Long, Double> buildHeatMapFromArticles(List<Article> articles) {
@@ -618,10 +612,7 @@ public class ArticleService {
             return;
         }
         stringRedisTemplate.delete(ARTICLE_DETAIL_CACHE_KEY + articleId);
-        Set<String> hotKeys = stringRedisTemplate.keys(ARTICLE_HOT_CACHE_KEY + "*");
-        if (hotKeys != null && !hotKeys.isEmpty()) {
-            stringRedisTemplate.delete(hotKeys);
-        }
+        articleAsyncService.evictHotListCaches();
     }
 
     private void syncArticleLikeCount(Long articleId) {

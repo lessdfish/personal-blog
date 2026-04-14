@@ -21,6 +21,7 @@ import com.userservice.mapper.UserMapper;
 import com.userservice.vo.ActiveUserSummaryVO;
 import com.userservice.vo.ActiveUserVO;
 import com.userservice.vo.LoginVO;
+import com.userservice.vo.LoginUserVO;
 import com.userservice.vo.PageVO;
 import com.userservice.vo.RolePermissionVO;
 import com.userservice.vo.UserInfoVO;
@@ -101,10 +102,10 @@ public class UserService {
         cacheToken(dbUser.getId(), token);
         userActivityService.recordActivity(dbUser.getId());
 
-        UserInfoVO userInfoVO = UserConverter.toUserInfoVO(dbUser, role, getPermissionCodes(role.getId(), role.getRoleCode()));
+        LoginUserVO loginUserVO = UserConverter.toLoginUserVO(dbUser);
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(token);
-        loginVO.setUserInfoVO(userInfoVO);
+        loginVO.setUser(loginUserVO);
         return loginVO;
     }
 

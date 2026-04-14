@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Article 调试</title>
+  <link rel="stylesheet" href="/api-debug/style.css" />
+  <script src="/api-debug/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div>
+      <h1>Article 接口调试</h1>
+      <div class="hint">分页和详情可匿名调用，发帖和互动需要先登录。</div>
+    </div>
+    <div class="nav">
+      <a href="/api-debug/index.html">首页</a>
+      <a href="/api-debug/user.html">User</a>
+      <a href="/api-debug/comment.html">Comment</a>
+      <a href="/api-debug/notify.html">Notify</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>普通分页 / 热榜 / 详情</h3>
+      <label>文章ID<input id="articleId" value="1" /></label>
+      <button onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/page/normal?pageNum=1&pageSize=5' }))">普通分页</button>
+      <button onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/page/hot?pageNum=1&pageSize=5' }))">热榜分页</button>
+      <button onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/detail/' + readInput('articleId', '1') }))">文章详情</button>
+      <button class="secondary" onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/heat/' + readInput('articleId', '1') }))">文章热度</button>
+      <button class="secondary" onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/views/' + readInput('articleId', '1') }))">浏览量</button>
+    </div>
+
+    <div class="card">
+      <h3>发帖</h3>
+      <label>标题<input id="articleTitle" value="WEB_DEBUG_ARTICLE" /></label>
+      <label>摘要<input id="articleSummary" value="debug summary" /></label>
+      <label>内容<textarea id="articleContent">debug content from static page</textarea></label>
+      <button onclick="runAction('articleResult', () => ({ method: 'POST', url: '/api/article/publish', body: { title: readInput('articleTitle'), summary: readInput('articleSummary'), content: readInput('articleContent'), boardId: 1, tags: 'debug,html' } }))">发布帖子</button>
+    </div>
+
+    <div class="card">
+      <h3>点赞 / 收藏</h3>
+      <button onclick="runAction('articleResult', () => ({ method: 'PUT', url: '/api/article/like/' + readInput('articleId', '1') }))">点赞</button>
+      <button onclick="runAction('articleResult', () => ({ method: 'DELETE', url: '/api/article/like/' + readInput('articleId', '1') }))">取消点赞</button>
+      <button onclick="runAction('articleResult', () => ({ method: 'PUT', url: '/api/article/favorite/' + readInput('articleId', '1') }))">收藏</button>
+      <button onclick="runAction('articleResult', () => ({ method: 'DELETE', url: '/api/article/favorite/' + readInput('articleId', '1') }))">取消收藏</button>
+      <button class="secondary" onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/likes/' + readInput('articleId', '1') }))">点赞数</button>
+      <button class="secondary" onclick="runAction('articleResult', () => ({ method: 'GET', url: '/api/article/favorites/count/' + readInput('articleId', '1') }))">收藏数</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>返回值</h3>
+    <pre id="articleResult">{}</pre>
+  </div>
+</div>
+</body>
+</html>

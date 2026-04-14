@@ -1,9 +1,10 @@
 package com.userservice.config;
 
-import com.blogcommon.util.JwtUtil;
+import com.blogcommon.auth.JwtAuthSupport;
+import com.blogcommon.auth.JwtUserInfo;
+import com.blogcommon.auth.TokenSessionValidator;
 import com.userservice.service.RolePermissionCacheService;
 import com.userservice.service.UserActivityService;
-import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -21,10 +22,13 @@ import java.util.Set;
 public class JwtInterceptor implements HandlerInterceptor {
     private final RolePermissionCacheService rolePermissionCacheService;
     private final UserActivityService userActivityService;
+    private final TokenSessionValidator tokenSessionValidator;
 
-    public JwtInterceptor(RolePermissionCacheService rolePermissionCacheService, UserActivityService userActivityService) {
+    public JwtInterceptor(RolePermissionCacheService rolePermissionCacheService, UserActivityService userActivityService,
+                          TokenSessionValidator tokenSessionValidator) {
         this.rolePermissionCacheService = rolePermissionCacheService;
         this.userActivityService = userActivityService;
+        this.tokenSessionValidator = tokenSessionValidator;
     }
 
     @Override
@@ -32,48 +36,25 @@ public class JwtInterceptor implements HandlerInterceptor {
         if (!(handler instanceof HandlerMethod handlerMethod)) {
             return true;
         }
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            writeJson(response, 2004, "未登录");
+        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(request, response, 2004, "UNAUTHORIZED", 2005, "INVALID_TOKEN");
+        if (userInfo == null) {
             return false;
         }
-
-        String token = authHeader.substring(7);
-        try {
-            Claims claims = JwtUtil.parseToken(token);
-            Long userId = parseUserId(claims.get("userId"));
-            String role = claims.get("role", String.class);
-            UserContext.setUserId(userId);
-            UserContext.setRole(role);
-            userActivityService.recordActivity(userId);
-
-            if (!hasRequiredRole(handlerMethod, role) || !hasRequiredPermission(handlerMethod, role)) {
-                writeJson(response, 3013, "无权限访问");
-                return false;
-            }
-            return true;
-        } catch (Exception e) {
-            writeJson(response, 2005, "token无效或已过期");
+        if (!tokenSessionValidator.isTokenActive(userInfo.userId(), userInfo.token())) {
+            writeJson(response, 2005, "INVALID_TOKEN");
             return false;
         }
+        userActivityService.recordActivity(userInfo.userId());
+        if (!hasRequiredRole(handlerMethod, userInfo.role()) || !hasRequiredPermission(handlerMethod, userInfo.role())) {
+            writeJson(response, 3013, "FORBIDDEN");
+            return false;
+        }
+        return true;
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
-        UserContext.clear();
-    }
-
-    private Long parseUserId(Object userIdObj) {
-        if (userIdObj == null) {
-            return null;
-        }
-        if (userIdObj instanceof Long value) {
-            return value;
-        }
-        if (userIdObj instanceof Integer value) {
-            return value.longValue();
-        }
-        return Long.parseLong(userIdObj.toString());
+        JwtAuthSupport.clear();
     }
 
     private boolean hasRequiredRole(HandlerMethod handlerMethod, String currentRole) {

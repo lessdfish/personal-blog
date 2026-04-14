@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notify 调试</title>
+  <link rel="stylesheet" href="/api-debug/style.css" />
+  <script src="/api-debug/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <div>
+      <h1>Notify 接口调试</h1>
+      <div class="hint">通知接口基本都需要先登录。</div>
+    </div>
+    <div class="nav">
+      <a href="/api-debug/index.html">首页</a>
+      <a href="/api-debug/user.html">User</a>
+      <a href="/api-debug/article.html">Article</a>
+      <a href="/api-debug/comment.html">Comment</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>通知查询</h3>
+      <label>通知ID<input id="notifyId" value="1" /></label>
+      <button onclick="runAction('notifyResult', () => ({ method: 'GET', url: '/api/notify/unread/count' }))">未读数</button>
+      <button onclick="runAction('notifyResult', () => ({ method: 'POST', url: '/api/notify/page', body: { pageNum: 1, pageSize: 10 } }))">通知分页</button>
+      <button class="secondary" onclick="runAction('notifyResult', () => ({ method: 'GET', url: '/api/notify/' + readInput('notifyId', '1') }))">通知详情</button>
+    </div>
+
+    <div class="card">
+      <h3>通知状态变更</h3>
+      <button onclick="runAction('notifyResult', () => ({ method: 'PUT', url: '/api/notify/read/' + readInput('notifyId', '1') }))">标记单条已读</button>
+      <button onclick="runAction('notifyResult', () => ({ method: 'PUT', url: '/api/notify/read/all' }))">全部已读</button>
+      <button onclick="runAction('notifyResult', () => ({ method: 'DELETE', url: '/api/notify/' + readInput('notifyId', '1') }))">删除通知</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>返回值</h3>
+    <pre id="notifyResult">{}</pre>
+  </div>
+</div>
+</body>
+</html>

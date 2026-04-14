@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="06 AllServices" type="CompoundRunConfigurationType" factoryName="Compound">
+    <toRun name="01 UserService" type="SpringBootApplicationConfigurationType" />
+    <toRun name="02 ArticleService" type="SpringBootApplicationConfigurationType" />
+    <toRun name="03 CommentService" type="SpringBootApplicationConfigurationType" />
+    <toRun name="04 NotifyService" type="SpringBootApplicationConfigurationType" />
+    <toRun name="05 BlogGateway" type="SpringBootApplicationConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

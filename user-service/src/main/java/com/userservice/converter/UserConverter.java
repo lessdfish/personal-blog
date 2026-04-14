@@ -2,6 +2,7 @@ package com.userservice.converter;
 
 import com.userservice.entity.Role;
 import com.userservice.entity.User;
+import com.userservice.vo.LoginUserVO;
 import com.userservice.vo.UserInfoVO;
 
 import java.util.List;
@@ -18,6 +19,17 @@ import java.util.List;
  */
 
 public class UserConverter {
+
+    public static LoginUserVO toLoginUserVO(User user) {
+        if (user == null) {
+            return null;
+        }
+        LoginUserVO vo = new LoginUserVO();
+        vo.setUsername(user.getUsername());
+        vo.setNickname(user.getNickname());
+        vo.setAvatar(user.getAvatar());
+        return vo;
+    }
 
     public static UserInfoVO toUserInfoVO(User user) {
         if (user == null) {

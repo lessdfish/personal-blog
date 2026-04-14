@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-@FeignClient(name = "article-service", url = "${feign.article-service.url}", configuration = FeignConfig.class)
+@FeignClient(name = "article-service", configuration = FeignConfig.class)
 public interface ArticleClient {
     @GetMapping("/article/simple/{id}")
     Result<ArticleSimpleVO> getSimpleById(@PathVariable("id") Long id);

@@ -1,5 +1,6 @@
 package com.userservice.controller;
 
+import com.blogcommon.auth.AuthConstants;
 import com.blogcommon.result.Result;
 import com.blogcommon.util.JwtUtil;
 import com.userservice.config.AdminOnly;
@@ -22,6 +23,8 @@ import com.userservice.vo.UserInfoVO;
 import com.userservice.vo.UserSimpleVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Cookie;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -45,8 +48,15 @@ public class UserTestController {
 
     @PostMapping("/login")
     @Operation(summary = "用户登录")
-    public Result<LoginVO> login(@Valid @RequestBody LoginDTO loginDTO) {
-        return Result.success(userService.login(loginDTO));
+    public Result<LoginVO> login(@Valid @RequestBody LoginDTO loginDTO, HttpServletResponse response) {
+        LoginVO loginVO = userService.login(loginDTO);
+        Cookie cookie = new Cookie(AuthConstants.AUTH_COOKIE_NAME, loginVO.getToken());
+        cookie.setHttpOnly(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(AuthConstants.AUTH_COOKIE_MAX_AGE);
+        response.addCookie(cookie);
+        loginVO.setToken(null);
+        return new Result<>(200, "登录成功", loginVO);
     }
 
     @GetMapping("/parse")
@@ -63,8 +73,13 @@ public class UserTestController {
 
     @PostMapping("/logout")
     @Operation(summary = "退出登录")
-    public Result<String> logout() {
+    public Result<String> logout(HttpServletResponse response) {
         userService.logout(UserContext.getUserId());
+        Cookie cookie = new Cookie(AuthConstants.AUTH_COOKIE_NAME, "");
+        cookie.setHttpOnly(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(0);
+        response.addCookie(cookie);
         return Result.success("退出成功");
     }
 

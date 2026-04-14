@@ -1,5 +1,6 @@
 package com.bloggateway.filter;
 
+import com.blogcommon.auth.AuthConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.result.Result;
 import com.blogcommon.util.JwtUtil;
@@ -22,6 +23,7 @@ import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 
 @Component
 public class GatewayAuthFilter implements GlobalFilter, Ordered {
@@ -32,6 +34,8 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
             "/api/user/parse",
             "/api/user/batch/simple",
             "/api/article/page",
+            "/api/article/page/normal",
+            "/api/article/page/hot",
             "/api/article/detail/**",
             "/api/article/hot",
             "/api/article/simple/**",
@@ -55,15 +59,15 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+        String token = resolveToken(exchange);
+        if (!StringUtils.hasText(token)) {
             return writeError(exchange.getResponse(), ResultCode.UNAUTHORIZED);
         }
 
-        String token = authHeader.substring(7);
         try {
             Claims claims = JwtUtil.parseToken(token);
             ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .header("X-User-Id", String.valueOf(claims.get("userId")))
                     .header("X-User-Role", String.valueOf(claims.get("role")))
                     .header("X-Username", String.valueOf(claims.getSubject()))
@@ -81,6 +85,20 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
 
     private boolean isWhiteListed(String path) {
         return WHITE_LIST.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
+    }
+
+    private String resolveToken(ServerWebExchange exchange) {
+        String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+        return exchange.getRequest().getCookies().getOrDefault(AuthConstants.AUTH_COOKIE_NAME, List.of())
+                .stream()
+                .map(cookie -> cookie.getValue())
+                .filter(Objects::nonNull)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
     }
 
     private Mono<Void> writeError(ServerHttpResponse response, ResultCode resultCode) {
