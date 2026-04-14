@@ -48,19 +48,6 @@
 - `blog-common`
   通用返回体、工具类、公共组件与共享模型。
 
-## 服务端口
-
-| 模块 | 端口 |
-| --- | --- |
-| `blog-gateway` | `8080` |
-| `user-service` | `9011` |
-| `article-service` | `9020` |
-| `comment-service` | `9003` |
-| `notify-service` | `9004` |
-| `nacos` | `8848` |
-| `redis` | `6379` |
-| `rabbitmq management` | `15672` |
-
 ## 项目结构
 
 ```text
@@ -89,12 +76,6 @@ blog-cloud
 
 ```bash
 docker compose up -d redis rabbitmq nacos
-```
-
-如果需要压测工具容器，也可以额外启动：
-
-```bash
-docker compose --profile tools up -d k6
 ```
 
 ### 3. 初始化数据库
@@ -127,7 +108,7 @@ docker compose --profile tools up -d k6
 
 ### 5. 启动服务
 
-按下面顺序启动更稳妥：
+按顺序启动：
 
 ```bash
 mvn -pl blog-common install
@@ -137,8 +118,6 @@ mvn -pl comment-service spring-boot:run
 mvn -pl notify-service spring-boot:run
 mvn -pl blog-gateway spring-boot:run
 ```
-
-也可以直接在 IDE 中分别启动各模块的启动类。
 
 ## 网关路由
 
@@ -185,28 +164,12 @@ mvn -pl blog-gateway spring-boot:run
 ## API 文档
 
 各服务已接入 Springdoc OpenAPI，启动后可访问：
-
-- `http://localhost:9011/swagger-ui.html`
-- `http://localhost:9020/swagger-ui.html`
-- `http://localhost:9003/swagger-ui.html`
-- `http://localhost:9004/swagger-ui.html`
-
 如果你希望统一从网关暴露文档，可以再补一层网关聚合配置。
 
-## 压测
 
-压测脚本位于 `pressure-test` 目录，可配合 `k6` 使用：
+## 后续优化方向
 
-```bash
-docker compose --profile tools run --rm k6 run /scripts/xxx.js
-```
-
-## 后续可优化方向
-
-- 接入统一配置中心与服务注册发现，去掉本地直连配置
 - 增加 Dockerfile 与一键部署脚本
-- 补充接口鉴权说明与默认测试账号
-- 增加 CI、单元测试与集成测试
 - 补充系统架构图、时序图和接口示例
 
 ## License
