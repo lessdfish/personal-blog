@@ -1,37 +1,305 @@
 services:
-  redis:
-    image: redis:7
-    container_name: blog-redis
+  mysql:
+    image: mysql:8.4
+    container_name: blog-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-root-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
+      MYSQL_USER: ${MYSQL_APP_USERNAME:-blog_cloud}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:-change-app-password}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
     ports:
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: blog-redis
+    restart: unless-stopped
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD";
+      else
+        exec redis-server --appendonly yes;
+      fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: blog-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-change-rabbitmq-password}
     ports:
-      - "${RABBITMQ_HOST_PORT:-35672}:5672"
       - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   nacos:
     image: nacos/nacos-server:v2.3.2
     container_name: blog-nacos
+    restart: unless-stopped
     environment:
       MODE: standalone
-      PREFER_HOST_MODE: hostname
+      SPRING_PROFILES_ACTIVE: standalone
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-true}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-serverIdentity}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-blog-cloud}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-change-this-to-a-long-random-string-at-least-32-chars}
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 128m
     ports:
-      - "${NACOS_HTTP_PORT:-8948}:8848"
-      - "${NACOS_GRPC_PORT:-9948}:9848"
-      - "${NACOS_RAFT_PORT:-9949}:9849"
-
-  k6:
-    image: grafana/k6:latest
-    container_name: blog-k6
-    profiles:
-      - tools
-    working_dir: /scripts
+      - "${NACOS_PUBLIC_PORT:-8848}:8848"
     volumes:
-      - ./pressure-test:/scripts
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    entrypoint:
-      - k6
+      - nacos-data:/home/nacos/data
+      - nacos-logs:/home/nacos/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  user-service:
+    build:
+      context: .
+      dockerfile: docker/backend-service.Dockerfile
+      args:
+        SERVICE_MODULE: user-service
+        SERVICE_PORT: 8081
+    container_name: blog-user-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8081
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
+      MYSQL_USERNAME: ${MYSQL_APP_USERNAME:-blog_cloud}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:-change-app-password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      AVATAR_UPLOAD_DIR: /app/data/avatars
+    volumes:
+      - avatar-data:/app/data/avatars
+
+  article-service:
+    build:
+      context: .
+      dockerfile: docker/backend-service.Dockerfile
+      args:
+        SERVICE_MODULE: article-service
+        SERVICE_PORT: 8082
+    container_name: blog-article-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8082
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
+      MYSQL_USERNAME: ${MYSQL_APP_USERNAME:-blog_cloud}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:-change-app-password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-rabbitmq-password}
+
+  comment-service:
+    build:
+      context: .
+      dockerfile: docker/backend-service.Dockerfile
+      args:
+        SERVICE_MODULE: comment-service
+        SERVICE_PORT: 8083
+    container_name: blog-comment-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8083
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
+      MYSQL_USERNAME: ${MYSQL_APP_USERNAME:-blog_cloud}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:-change-app-password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-rabbitmq-password}
+
+  notify-service:
+    build:
+      context: .
+      dockerfile: docker/backend-service.Dockerfile
+      args:
+        SERVICE_MODULE: notify-service
+        SERVICE_PORT: 8084
+    container_name: blog-notify-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8084
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
+      MYSQL_USERNAME: ${MYSQL_APP_USERNAME:-blog_cloud}
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:-change-app-password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-rabbitmq-password}
+
+  blog-gateway:
+    build:
+      context: .
+      dockerfile: docker/backend-service.Dockerfile
+      args:
+        SERVICE_MODULE: blog-gateway
+        SERVICE_PORT: 18080
+    container_name: blog-gateway
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      article-service:
+        condition: service_started
+      comment-service:
+        condition: service_started
+      notify-service:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 18080
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "${GATEWAY_PUBLIC_PORT:-18080}:18080"
+
+  blog-web:
+    build:
+      context: .
+      dockerfile: blog-web/Dockerfile
+    container_name: blog-web
+    restart: unless-stopped
+    depends_on:
+      blog-gateway:
+        condition: service_started
+    ports:
+      - "${WEB_PUBLIC_PORT:-80}:80"
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  nacos-data:
+  nacos-logs:
+  avatar-data:

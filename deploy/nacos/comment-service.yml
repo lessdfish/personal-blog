@@ -1,0 +1,36 @@
+server:
+  port: 8083
+
+spring:
+  cloud:
+    loadbalancer:
+      cache:
+        enabled: true
+        caffeine:
+          spec: initialCapacity=32,maximumSize=256,expireAfterWrite=30s
+      retry:
+        enabled: true
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+  api-docs:
+    enabled: true
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 2000
+        readTimeout: 3000
+
+logging:
+  level:
+    com.commentservice: info
+

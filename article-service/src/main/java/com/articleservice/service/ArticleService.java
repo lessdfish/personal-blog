@@ -646,6 +646,9 @@ public class ArticleService {
     }
 
     private void sendArticleInteractionNotify(Long senderId, Long articleId, String action) {
+        if (rabbitTemplate == null) {
+            return;
+        }
         Article article = articleMapper.selectById(articleId);
         if (article == null || article.getAuthorId() == null || Objects.equals(article.getAuthorId(), senderId)) {
             return;

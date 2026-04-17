@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.m2
+**/target
+**/run-logs
+blog-web/node_modules
+blog-web/dist
+*.log
+.env
+blog-web/.env.local
+
