@@ -23,6 +23,24 @@ public interface UserMapper {
     @Select("select * from tb_user where username = #{username}")
     User selectByUsername(String username);
 
+    @Select("select * from tb_user where nickname = #{nickname} limit 1")
+    User selectByNickname(String nickname);
+
+    @Select("select * from tb_user where email = #{email} limit 1")
+    User selectByEmail(String email);
+
+    @Select("select * from tb_user where phone = #{phone} limit 1")
+    User selectByPhone(String phone);
+
+    @Select("select * from tb_user where nickname = #{nickname} and id <> #{id} limit 1")
+    User selectByNicknameExcludeId(@Param("nickname") String nickname, @Param("id") Long id);
+
+    @Select("select * from tb_user where email = #{email} and id <> #{id} limit 1")
+    User selectByEmailExcludeId(@Param("email") String email, @Param("id") Long id);
+
+    @Select("select * from tb_user where phone = #{phone} and id <> #{id} limit 1")
+    User selectByPhoneExcludeId(@Param("phone") String phone, @Param("id") Long id);
+
     @Insert("""
             insert into tb_user(username, password, nickname, email, phone, status, role_id)
             values(#{username}, #{password}, #{nickname}, #{email}, #{phone}, #{status}, #{roleId})

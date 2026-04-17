@@ -33,5 +33,7 @@ build/
 .vscode/
 .m2/
 run-logs/
+.env
+blog-web/.env.local
 **/application-local.yml
 **/application-secrets.yml

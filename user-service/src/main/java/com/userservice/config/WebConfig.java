@@ -28,6 +28,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns("/user/login",
                         "/user/register",
+                        "/user/check",
                         "/user/hello",
                         "/user/parse",
                         "/user/batch/simple",  // 允许Feign调用

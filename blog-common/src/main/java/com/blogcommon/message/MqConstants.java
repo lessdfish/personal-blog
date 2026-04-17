@@ -14,6 +14,9 @@ public final class MqConstants {
     public static final String COMMENT_NOTIFY_EXCHANGE = "blog.comment.exchange";
     public static final String COMMENT_NOTIFY_QUEUE = "blog.notify.queue";
     public static final String COMMENT_NOTIFY_ROUTING_KEY = "comment.notify";
+    public static final String ARTICLE_INTERACTION_NOTIFY_EXCHANGE = "blog.article.interaction.exchange";
+    public static final String ARTICLE_INTERACTION_NOTIFY_QUEUE = "blog.notify.interaction.queue";
+    public static final String ARTICLE_INTERACTION_NOTIFY_ROUTING_KEY = "article.interaction.notify";
 
     private MqConstants() {
     }

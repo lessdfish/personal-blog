@@ -10,7 +10,10 @@
       <env name="MYSQL_PASSWORD" value="032581" />
       <env name="REDIS_HOST" value="127.0.0.1" />
       <env name="REDIS_PORT" value="6379" />
-      <env name="NACOS_SERVER_ADDR" value="127.0.0.1:8848" />
+      <env name="NACOS_SERVER_ADDR" value="127.0.0.1:9287" />
+      <env name="GATEWAY_PORT" value="18080" />
+      <env name="RABBITMQ_HOST" value="127.0.0.1" />
+      <env name="RABBITMQ_PORT" value="35672" />
     </envs>
     <module name="blog-gateway" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.bloggateway.BlogGatewayApplication" />

@@ -3,6 +3,7 @@ package com.commentservice.service;
 import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
+import com.blogcommon.logging.DbWriteAuditLogger;
 import com.blogcommon.message.CommentNotifyMessage;
 import com.blogcommon.message.MqConstants;
 import com.blogcommon.result.Result;
@@ -86,14 +87,18 @@ public class CommentService {
         if (commentMapper.insert(comment) <= 0) {
             throw new BusinessException(ResultCode.COMMENT_CREATE_FAILED);
         }
+        DbWriteAuditLogger.logInsert("tb_comment", comment);
         syncArticleCommentCount(dto.getArticleId(), 1);
 
         if (!Objects.equals(userId, notifyUserId)) {
+            Map<Long, UserSimpleVO> senderMap = getUserMap(List.of(userId));
+            UserSimpleVO sender = senderMap.get(userId);
             CommentNotifyMessage message = new CommentNotifyMessage();
             message.setArticleId(dto.getArticleId());
             message.setCommentId(comment.getId());
             message.setSenderId(userId);
             message.setReceiverId(notifyUserId);
+            message.setSenderName(sender != null ? sender.getName() : "有用户");
             message.setArticleTitle(article.getTitle());
             message.setContent(dto.getContent());
             rabbitTemplate.convertAndSend(

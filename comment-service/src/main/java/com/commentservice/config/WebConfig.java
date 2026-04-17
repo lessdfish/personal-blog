@@ -27,6 +27,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/comment/**")
-                .excludePathPatterns("/comment/article/**");
+                .excludePathPatterns("/comment/article/**",
+                        "/comment/page");
     }
 }

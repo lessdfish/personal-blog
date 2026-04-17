@@ -14,7 +14,7 @@
       <env name="RABBITMQ_PORT" value="35672" />
       <env name="RABBITMQ_USERNAME" value="guest" />
       <env name="RABBITMQ_PASSWORD" value="guest" />
-      <env name="NACOS_SERVER_ADDR" value="127.0.0.1:8848" />
+      <env name="NACOS_SERVER_ADDR" value="127.0.0.1:9287" />
     </envs>
     <module name="article-service" />
     <option name="SPRING_BOOT_MAIN_CLASS" value="com.articleservice.ArticleServiceApplication" />

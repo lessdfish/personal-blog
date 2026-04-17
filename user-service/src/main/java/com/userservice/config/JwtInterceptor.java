@@ -36,6 +36,9 @@ public class JwtInterceptor implements HandlerInterceptor {
         if (!(handler instanceof HandlerMethod handlerMethod)) {
             return true;
         }
+        if ("GET".equalsIgnoreCase(request.getMethod()) && request.getRequestURI().startsWith("/user/avatar/")) {
+            return true;
+        }
         JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(request, response, 2004, "UNAUTHORIZED", 2005, "INVALID_TOKEN");
         if (userInfo == null) {
             return false;

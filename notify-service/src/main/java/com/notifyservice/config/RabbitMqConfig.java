@@ -59,4 +59,21 @@ public class RabbitMqConfig {
                 .to(commentNotifyExchange())
                 .with(MqConstants.COMMENT_NOTIFY_ROUTING_KEY);
     }
+
+    @Bean
+    public DirectExchange articleInteractionNotifyExchange() {
+        return ExchangeBuilder.directExchange(MqConstants.ARTICLE_INTERACTION_NOTIFY_EXCHANGE).build();
+    }
+
+    @Bean
+    public Queue articleInteractionNotifyQueue() {
+        return QueueBuilder.durable(MqConstants.ARTICLE_INTERACTION_NOTIFY_QUEUE).build();
+    }
+
+    @Bean
+    public Binding articleInteractionNotifyBinding() {
+        return BindingBuilder.bind(articleInteractionNotifyQueue())
+                .to(articleInteractionNotifyExchange())
+                .with(MqConstants.ARTICLE_INTERACTION_NOTIFY_ROUTING_KEY);
+    }
 }

@@ -39,6 +39,7 @@ public final class RedisKeyConstants {
     public static final String USER_LAST_ACTIVE_KEY = "blog:user:last-active:";
     public static final String USER_ONLINE_KEY = "blog:user:online:";
     public static final long USER_ONLINE_EXPIRE = 10 * 60;
+    public static final String USER_SESSION_INFO_KEY = "blog:user:session:";
 
     public static final String ROLE_PERMISSION_BY_ID_KEY = "blog:role:permission:id:";
     public static final String ROLE_PERMISSION_BY_CODE_KEY = "blog:role:permission:code:";

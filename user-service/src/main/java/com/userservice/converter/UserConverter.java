@@ -2,6 +2,7 @@ package com.userservice.converter;
 
 import com.userservice.entity.Role;
 import com.userservice.entity.User;
+import com.userservice.vo.CurrentUserVO;
 import com.userservice.vo.LoginUserVO;
 import com.userservice.vo.UserInfoVO;
 
@@ -28,6 +29,20 @@ public class UserConverter {
         vo.setUsername(user.getUsername());
         vo.setNickname(user.getNickname());
         vo.setAvatar(user.getAvatar());
+        return vo;
+    }
+
+    public static CurrentUserVO toCurrentUserVO(User user) {
+        if (user == null) {
+            return null;
+        }
+        CurrentUserVO vo = new CurrentUserVO();
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setNickname(user.getNickname());
+        vo.setAvatar(user.getAvatar());
+        vo.setEmail(user.getEmail());
+        vo.setPhone(user.getPhone());
         return vo;
     }
 

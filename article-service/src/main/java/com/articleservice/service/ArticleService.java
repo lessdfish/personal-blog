@@ -1,5 +1,6 @@
 package com.articleservice.service;
 
+import com.articleservice.client.UserClient;
 import com.articleservice.converter.ArticleConverter;
 import com.articleservice.dto.ArticleManageDTO;
 import com.articleservice.dto.ArticlePublishDTO;
@@ -18,14 +19,20 @@ import com.articleservice.vo.ArticlePageQueryDTO;
 import com.articleservice.vo.ArticleSimpleVO;
 import com.articleservice.vo.BoardVO;
 import com.articleservice.vo.PageVO;
+import com.articleservice.vo.UserSimpleVO;
 import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
+import com.blogcommon.logging.DbWriteAuditLogger;
+import com.blogcommon.message.ArticleInteractionNotifyMessage;
+import com.blogcommon.message.MqConstants;
+import com.blogcommon.result.Result;
 import com.blogcommon.util.RedisLockUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -53,6 +60,10 @@ public class ArticleService {
     private ArticleLikeMapper articleLikeMapper;
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+    @Autowired
+    private UserClient userClient;
     @Autowired
     private ObjectMapper objectMapper;
     @Autowired
@@ -86,7 +97,8 @@ public class ArticleService {
         if (articleMapper.insert(article) <= 0) {
             throw new BusinessException(ResultCode.ARTICLE_PUBLISH_FAILED);
         }
-        touchHeat(article.getId(), 5D);
+        DbWriteAuditLogger.logInsert("tb_article", article);
+        syncHeat(article.getId());
     }
 
     public PageVO<ArticleListVO> pageArticles(ArticlePageQueryDTO queryDTO) {
@@ -190,12 +202,14 @@ public class ArticleService {
                 articleLike.setUserId(userId);
                 int rows = articleLikeMapper.insertIgnore(articleLike);
                 if (rows > 0) {
+                    DbWriteAuditLogger.logInsert("tb_article_like", articleLike);
                     syncArticleLikeCount(articleId);
                     if (stringRedisTemplate != null) {
                         stringRedisTemplate.opsForSet().add(RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
                     }
-                    touchHeat(articleId, 4D);
+                    syncHeat(articleId);
                     clearArticleCache(articleId);
+                    sendArticleInteractionNotify(userId, articleId, "点赞");
                 }
                 return true;
             }
@@ -206,7 +220,7 @@ public class ArticleService {
                 if (stringRedisTemplate != null) {
                     stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
                 }
-                touchHeat(articleId, -4D);
+                syncHeat(articleId);
                 clearArticleCache(articleId);
             } else if (stringRedisTemplate != null) {
                 stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_LIKED_SET_KEY + userId, articleId.toString());
@@ -227,12 +241,14 @@ public class ArticleService {
                 favorite.setUserId(userId);
                 int rows = articleFavoriteMapper.insertIgnore(favorite);
                 if (rows > 0) {
+                    DbWriteAuditLogger.logInsert("tb_article_favorite", favorite);
                     syncArticleFavoriteCount(articleId);
                     if (stringRedisTemplate != null) {
                         stringRedisTemplate.opsForSet().add(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
                     }
-                    touchHeat(articleId, 3D);
+                    syncHeat(articleId);
                     clearArticleCache(articleId);
+                    sendArticleInteractionNotify(userId, articleId, "收藏");
                 }
                 return true;
             }
@@ -243,7 +259,7 @@ public class ArticleService {
                 if (stringRedisTemplate != null) {
                     stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
                 }
-                touchHeat(articleId, -3D);
+                syncHeat(articleId);
                 clearArticleCache(articleId);
             } else if (stringRedisTemplate != null) {
                 stringRedisTemplate.opsForSet().remove(RedisKeyConstants.ARTICLE_FAVORITE_SET_KEY + userId, articleId.toString());
@@ -364,6 +380,7 @@ public class ArticleService {
         if (articleMapper.updateStatus(articleId, 0) <= 0) {
             throw new BusinessException(ResultCode.ARTICLE_DELETE_FAILED);
         }
+        syncHeat(articleId);
         clearArticleCache(articleId);
     }
 
@@ -385,8 +402,7 @@ public class ArticleService {
             article.setStatus(dto.getStatus());
         }
         articleMapper.updateManageInfo(article);
-        touchHeat(articleId, (dto.getIsTop() != null && dto.getIsTop() == 1 ? 6D : 0D)
-                + (dto.getIsEssence() != null && dto.getIsEssence() == 1 ? 10D : 0D));
+        syncHeat(articleId);
         clearArticleCache(articleId);
     }
 
@@ -404,6 +420,7 @@ public class ArticleService {
         board.setSortOrder(dto.getSortOrder() == null ? 99 : dto.getSortOrder());
         board.setStatus(1);
         boardMapper.insert(board);
+        DbWriteAuditLogger.logInsert("tb_board", board);
     }
 
     public List<BoardVO> listBoards() {
@@ -432,7 +449,7 @@ public class ArticleService {
         if (rows <= 0) {
             throw new BusinessException(ResultCode.ARTICLE_UPDATE_FAILED);
         }
-        touchHeat(articleId, delta * 5D);
+        syncHeat(articleId);
         clearArticleCache(articleId);
     }
 
@@ -444,15 +461,7 @@ public class ArticleService {
         if (heat != null) {
             return heat;
         }
-        Article article = articleMapper.selectById(articleId);
-        if (article == null) {
-            return 0D;
-        }
-        double initialHeat = article.getViewCount() * 1D + article.getCommentCount() * 5D + article.getLikeCount() * 4D
-                + article.getFavoriteCount() * 3D + (article.getIsTop() == null ? 0 : article.getIsTop() * 6D)
-                + (article.getIsEssence() == null ? 0 : article.getIsEssence() * 10D);
-        stringRedisTemplate.opsForZSet().add(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString(), initialHeat);
-        return initialHeat;
+        return syncHeat(articleId);
     }
 
     private void validatePublishDTO(ArticlePublishDTO dto) {
@@ -486,7 +495,7 @@ public class ArticleService {
         }
         if (stringRedisTemplate == null || !StringUtils.hasText(viewerKey)) {
             articleMapper.incrementViewCount(articleId);
-            touchHeat(articleId, 1D);
+            syncHeat(articleId);
             clearArticleCache(articleId);
             return;
         }
@@ -494,18 +503,29 @@ public class ArticleService {
         Boolean firstView = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10, TimeUnit.MINUTES);
         if (Boolean.TRUE.equals(firstView)) {
             articleMapper.incrementViewCount(articleId);
-            touchHeat(articleId, 1D);
+            syncHeat(articleId);
             clearArticleCache(articleId);
         }
     }
 
-    private void touchHeat(Long articleId, double delta) {
-        if (stringRedisTemplate == null || articleId == null) {
-            return;
+    private double syncHeat(Long articleId) {
+        if (articleId == null) {
+            return 0D;
         }
-        stringRedisTemplate.opsForZSet().incrementScore(
-                RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString(), delta);
-        stringRedisTemplate.opsForValue().increment(RedisKeyConstants.ARTICLE_HEAT_KEY + articleId, delta);
+        Article article = articleMapper.selectAnyById(articleId);
+        if (article == null || article.getStatus() == null || article.getStatus() != 1) {
+            if (stringRedisTemplate != null) {
+                stringRedisTemplate.opsForZSet().remove(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString());
+                stringRedisTemplate.delete(RedisKeyConstants.ARTICLE_HEAT_KEY + articleId);
+            }
+            return 0D;
+        }
+        double heat = calculateHeat(article);
+        if (stringRedisTemplate != null) {
+            stringRedisTemplate.opsForZSet().add(RedisKeyConstants.ARTICLE_HEAT_RANK_KEY, articleId.toString(), heat);
+            stringRedisTemplate.opsForValue().set(RedisKeyConstants.ARTICLE_HEAT_KEY + articleId, String.valueOf(heat));
+        }
+        return heat;
     }
 
     private List<ArticleListVO> buildArticleListVOs(List<Article> articles, Map<Long, Double> heatMap) {
@@ -623,6 +643,40 @@ public class ArticleService {
     private void syncArticleFavoriteCount(Long articleId) {
         Long exactCount = articleFavoriteMapper.countByArticle(articleId);
         articleMapper.updateFavoriteCountTo(articleId, exactCount == null ? 0 : exactCount.intValue());
+    }
+
+    private void sendArticleInteractionNotify(Long senderId, Long articleId, String action) {
+        Article article = articleMapper.selectById(articleId);
+        if (article == null || article.getAuthorId() == null || Objects.equals(article.getAuthorId(), senderId)) {
+            return;
+        }
+
+        ArticleInteractionNotifyMessage message = new ArticleInteractionNotifyMessage();
+        message.setArticleId(articleId);
+        message.setSenderId(senderId);
+        message.setReceiverId(article.getAuthorId());
+        message.setSenderName(getUserName(senderId));
+        message.setArticleTitle(article.getTitle());
+        message.setAction(action);
+        rabbitTemplate.convertAndSend(
+                MqConstants.ARTICLE_INTERACTION_NOTIFY_EXCHANGE,
+                MqConstants.ARTICLE_INTERACTION_NOTIFY_ROUTING_KEY,
+                message
+        );
+    }
+
+    private String getUserName(Long userId) {
+        try {
+            Result<List<UserSimpleVO>> result = userClient.getBatchUserSimple(List.of(userId));
+            if (result != null && result.getData() != null && !result.getData().isEmpty()) {
+                UserSimpleVO user = result.getData().get(0);
+                if (user != null && StringUtils.hasText(user.getName())) {
+                    return user.getName();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "有用户";
     }
 
     private boolean executeInteractionWithLock(String lockPrefix, Long userId, Long articleId, InteractionAction action) {

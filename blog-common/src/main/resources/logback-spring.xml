@@ -26,9 +26,26 @@
         </encoder>
     </appender>
 
+    <appender name="DB_WRITE_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/db-write.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/db-write.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
     <logger name="org.springframework" level="INFO"/>
     <logger name="org.mybatis" level="INFO"/>
     <logger name="com.blog" level="INFO"/>
+    <logger name="DB_WRITE_AUDIT" level="INFO" additivity="false">
+        <appender-ref ref="DB_WRITE_FILE"/>
+    </logger>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

@@ -8,6 +8,7 @@ import com.userservice.config.RequirePermission;
 import com.userservice.config.UserContext;
 import com.userservice.dto.LoginDTO;
 import com.userservice.dto.RegisterDTO;
+import com.userservice.dto.ResetPasswordByPhoneDTO;
 import com.userservice.dto.UpdatePasswordDTO;
 import com.userservice.dto.UpdateUserInfoDTO;
 import com.userservice.dto.UpdateUserRoleDTO;
@@ -16,6 +17,7 @@ import com.userservice.dto.UserPageQueryDTO;
 import com.userservice.service.UserService;
 import com.userservice.vo.ActiveUserSummaryVO;
 import com.userservice.vo.ActiveUserVO;
+import com.userservice.vo.CurrentUserVO;
 import com.userservice.vo.LoginVO;
 import com.userservice.vo.PageVO;
 import com.userservice.vo.RolePermissionVO;
@@ -23,18 +25,30 @@ import com.userservice.vo.UserInfoVO;
 import com.userservice.vo.UserSimpleVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.MalformedURLException;
+import java.nio.file.Path;
 import java.util.List;
 
 @RestController
 @RequestMapping("/user")
 @Tag(name = "用户模块", description = "用户登录、资料、权限与活跃度接口")
 public class UserTestController {
+    @Value("${app.avatar.upload-dir}")
+    private String avatarUploadDir;
 
     @Autowired
     private UserService userService;
@@ -48,8 +62,9 @@ public class UserTestController {
 
     @PostMapping("/login")
     @Operation(summary = "用户登录")
-    public Result<LoginVO> login(@Valid @RequestBody LoginDTO loginDTO, HttpServletResponse response) {
+    public Result<LoginVO> login(@Valid @RequestBody LoginDTO loginDTO, HttpServletResponse response, HttpServletRequest request) {
         LoginVO loginVO = userService.login(loginDTO);
+        userService.recordSessionInfo(loginVO.getUser().getUsername(), request);
         Cookie cookie = new Cookie(AuthConstants.AUTH_COOKIE_NAME, loginVO.getToken());
         cookie.setHttpOnly(true);
         cookie.setPath("/");
@@ -65,9 +80,15 @@ public class UserTestController {
         return Result.success(JwtUtil.parseToken(token));
     }
 
+    @GetMapping("/check")
+    @Operation(summary = "校验注册字段是否可用")
+    public Result<Boolean> checkAvailability(@RequestParam("field") String field, @RequestParam("value") String value) {
+        return Result.success(userService.isFieldAvailable(field, value));
+    }
+
     @GetMapping("/me")
     @Operation(summary = "查询当前用户信息")
-    public Result<UserInfoVO> me() {
+    public Result<CurrentUserVO> me() {
         return Result.success(userService.getCurrentUserInfo(UserContext.getUserId()));
     }
 
@@ -90,11 +111,55 @@ public class UserTestController {
         return Result.success("修改成功");
     }
 
+    @PostMapping("/avatar/upload")
+    @Operation(summary = "上传头像")
+    public Result<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        return Result.success(userService.uploadAvatar(UserContext.getUserId(), file));
+    }
+
+    @GetMapping("/avatar/{filename:.+}")
+    @Operation(summary = "获取头像文件")
+    public ResponseEntity<Resource> getAvatar(@PathVariable("filename") String filename) throws MalformedURLException {
+        Path uploadDir = Path.of(avatarUploadDir).toAbsolutePath().normalize();
+        Path avatarPath = uploadDir.resolve(filename).normalize();
+        if (!avatarPath.startsWith(uploadDir)) {
+            return ResponseEntity.notFound().build();
+        }
+        Resource resource = new UrlResource(avatarPath.toUri());
+        if (!resource.exists() || !resource.isReadable()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        String lowerName = filename.toLowerCase();
+        if (lowerName.endsWith(".png")) {
+            mediaType = MediaType.IMAGE_PNG;
+        } else if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+            mediaType = MediaType.IMAGE_JPEG;
+        } else if (lowerName.endsWith(".gif")) {
+            mediaType = MediaType.IMAGE_GIF;
+        } else if (lowerName.endsWith(".webp")) {
+            mediaType = MediaType.parseMediaType("image/webp");
+        }
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .contentType(mediaType)
+                .body(resource);
+    }
+
     @PutMapping("/password")
     @Operation(summary = "修改密码")
     public Result<String> updatePassword(@Valid @RequestBody UpdatePasswordDTO updatePasswordDTO) {
         userService.updatePassword(UserContext.getUserId(), updatePasswordDTO);
         return Result.success("密码修改成功");
+    }
+
+    @PostMapping("/password/reset")
+    @Operation(summary = "通过用户名和手机号重置密码")
+    public Result<String> resetPasswordByPhone(@Valid @RequestBody ResetPasswordByPhoneDTO dto) {
+        userService.resetPasswordByPhone(dto);
+        return Result.success("密码重置成功");
     }
 
     @GetMapping("/page")

@@ -3,6 +3,8 @@ package com.notifyservice.service;
 import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
+import com.blogcommon.logging.DbWriteAuditLogger;
+import com.blogcommon.message.ArticleInteractionNotifyMessage;
 import com.blogcommon.message.CommentNotifyMessage;
 import com.notifyservice.config.UserContext;
 import com.notifyservice.dto.NotifyPageQueryDTO;
@@ -37,6 +39,8 @@ public class NotifyService {
     private StringRedisTemplate stringRedisTemplate;
 
     private static final int NOTIFY_TYPE_COMMENT = 1;
+    private static final int NOTIFY_TYPE_LIKE = 2;
+    private static final int NOTIFY_TYPE_FAVORITE = 3;
 
     /**
      * 处理评论通知消息
@@ -45,15 +49,32 @@ public class NotifyService {
         Notify notify = new Notify();
         notify.setUserId(message.getReceiverId());
         notify.setType(NOTIFY_TYPE_COMMENT);
-        notify.setTitle("文章《" + message.getArticleTitle() + "》有新评论");
-        notify.setContent(message.getContent());
+        String senderName = defaultSenderName(message.getSenderName());
+        notify.setTitle("用户" + senderName + "，评论了你的文章");
+        notify.setContent(buildInteractionContent(senderName, "评论", message.getArticleTitle(), message.getContent()));
         notify.setArticleId(message.getArticleId());
         notify.setCommentId(message.getCommentId());
         notify.setSenderId(message.getSenderId());
 
         notifyMapper.insert(notify);
+        DbWriteAuditLogger.logInsert("tb_notify", notify);
 
         // 增加未读计数缓存
+        incrementUnreadCache(message.getReceiverId());
+    }
+
+    public void handleArticleInteractionNotify(ArticleInteractionNotifyMessage message) {
+        Notify notify = new Notify();
+        notify.setUserId(message.getReceiverId());
+        notify.setType(resolveInteractionType(message.getAction()));
+        String senderName = defaultSenderName(message.getSenderName());
+        notify.setTitle("用户" + senderName + "，" + message.getAction() + "了你的文章");
+        notify.setContent(buildInteractionContent(senderName, message.getAction(), message.getArticleTitle(), null));
+        notify.setArticleId(message.getArticleId());
+        notify.setSenderId(message.getSenderId());
+
+        notifyMapper.insert(notify);
+        DbWriteAuditLogger.logInsert("tb_notify", notify);
         incrementUnreadCache(message.getReceiverId());
     }
 
@@ -74,7 +95,9 @@ public class NotifyService {
     private void decrementUnreadCache(Long userId, long count) {
         if (stringRedisTemplate != null && userId != null) {
             String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
-            stringRedisTemplate.opsForValue().decrement(key, count);
+            Long current = getUnreadCountFromCache(key);
+            long next = Math.max(0L, current - count);
+            stringRedisTemplate.opsForValue().set(key, String.valueOf(next), RedisKeyConstants.NOTIFY_UNREAD_EXPIRE, TimeUnit.SECONDS);
         }
     }
 
@@ -174,12 +197,16 @@ public class NotifyService {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
+        if (notify.getIsRead() != null && notify.getIsRead() == 1) {
+            syncUnreadCache(userId);
+            return;
+        }
+
         if (notifyMapper.markAsRead(notifyId, userId) <= 0) {
             throw new BusinessException(ResultCode.NOTIFY_READ_FAILED);
         }
-        
-        // 减少未读计数缓存
-        decrementUnreadCache(userId, 1);
+
+        syncUnreadCache(userId);
     }
 
     /**
@@ -190,8 +217,6 @@ public class NotifyService {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
         notifyMapper.markAllAsRead(userId);
-        
-        // 删除未读计数缓存
         deleteUnreadCache(userId);
     }
 
@@ -215,6 +240,64 @@ public class NotifyService {
         if (notifyMapper.deleteByIdAndUserId(notifyId, userId) <= 0) {
             throw new BusinessException(ResultCode.NOTIFY_DELETE_FAILED);
         }
+
+        if (notify.getIsRead() != null && notify.getIsRead() == 0) {
+            syncUnreadCache(userId);
+        }
+    }
+
+    private void syncUnreadCache(Long userId) {
+        if (stringRedisTemplate == null || userId == null) {
+            return;
+        }
+        Long count = notifyMapper.countUnreadByUserId(userId);
+        String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
+        stringRedisTemplate.opsForValue().set(
+                key,
+                String.valueOf(count == null ? 0L : count),
+                RedisKeyConstants.NOTIFY_UNREAD_EXPIRE,
+                TimeUnit.SECONDS);
+    }
+
+    private long getUnreadCountFromCache(String key) {
+        if (stringRedisTemplate == null) {
+            return 0L;
+        }
+        String cached = stringRedisTemplate.opsForValue().get(key);
+        if (cached == null || cached.isBlank()) {
+            return 0L;
+        }
+        try {
+            return Math.max(0L, Long.parseLong(cached));
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
+    }
+
+    private Integer resolveInteractionType(String action) {
+        if ("收藏".equals(action)) {
+            return NOTIFY_TYPE_FAVORITE;
+        }
+        return NOTIFY_TYPE_LIKE;
+    }
+
+    private String defaultSenderName(String senderName) {
+        return senderName == null || senderName.isBlank() ? "有用户" : senderName;
+    }
+
+    private String buildInteractionContent(String senderName, String action, String articleTitle, String extraContent) {
+        StringBuilder builder = new StringBuilder()
+                .append("用户")
+                .append(senderName)
+                .append("，")
+                .append(action)
+                .append("了你的文章《")
+                .append(articleTitle == null || articleTitle.isBlank() ? "未命名文章" : articleTitle)
+                .append("》");
+        if (extraContent != null && !extraContent.isBlank()) {
+            builder.append("：").append(extraContent);
+        }
+        return builder.toString();
     }
 
     private NotifyVO toVO(Notify notify) {

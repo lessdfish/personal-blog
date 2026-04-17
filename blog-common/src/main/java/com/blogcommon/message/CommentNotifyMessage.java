@@ -25,6 +25,7 @@ public class CommentNotifyMessage implements Serializable {
     private Long commentId;
     private Long senderId;
     private Long receiverId;
+    private String senderName;
     private String articleTitle;
     private String content;
     private LocalDateTime createdAt = LocalDateTime.now();
