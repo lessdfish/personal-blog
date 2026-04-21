@@ -4,8 +4,17 @@
 
 项目采用多模块微服务拆分，围绕用户鉴权、文章发布、评论链路、通知中心、热点数据缓存和网关统一接入进行实现，适合作为 Java 后端 / 微服务方向的练手与展示项目。
 
-## 项目特性
+## 项目演示：
+首页
+![首页](docs/images/demo-home.png)
+注册界面
+![注册](docs/images/register.png)
+文章详情页
+![文章详情](docs/images/test.png)
+发布页面(支持Markdown)
+![文章发布](docs/images/publish.png)
 
+## 项目特性
 - 用户注册、登录、登出、Token 校验与刷新
 - 用户资料维护、角色分配、状态管理、活跃度统计
 - 文章发布、编辑、删除、详情、普通分页、热榜分页
@@ -161,15 +170,8 @@ mvn -pl blog-gateway spring-boot:run
 - `GET /api/notify/notify/unread/count`
 - `PUT /api/notify/notify/read/{id}`
 
-## API 文档
-
-各服务已接入 Springdoc OpenAPI，启动后可访问：
-如果你希望统一从网关暴露文档，可以再补一层网关聚合配置。
-
-
 ## 后续优化方向
 
-- 增加 Dockerfile 与一键部署脚本
 - 补充系统架构图、时序图和接口示例
 
 ## License
