@@ -17,19 +17,23 @@ class RequestUserContextTest {
     void shouldSetAndGetUserContext() {
         RequestUserContext.setUserId(123L);
         RequestUserContext.setRole("MODERATOR");
+        RequestUserContext.setUsername("alice");
 
         assertEquals(123L, RequestUserContext.getUserId());
         assertEquals("MODERATOR", RequestUserContext.getRole());
+        assertEquals("alice", RequestUserContext.getUsername());
     }
 
     @Test
     void clearShouldRemoveStoredValues() {
         RequestUserContext.setUserId(456L);
         RequestUserContext.setRole("USER");
+        RequestUserContext.setUsername("bob");
 
         RequestUserContext.clear();
 
         assertNull(RequestUserContext.getUserId());
         assertNull(RequestUserContext.getRole());
+        assertNull(RequestUserContext.getUsername());
     }
 }

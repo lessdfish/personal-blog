@@ -1,0 +1,168 @@
+name: blog-cloud
+
+x-java-service-limits: &java-service-limits
+  cpus: 0.75
+  mem_limit: 768m
+  mem_reservation: 512m
+  environment:
+    JAVA_OPTS: ${JAVA_SERVICE_JAVA_OPTS:--Xms256m -Xmx512m -XX:+UseG1GC -XX:MaxMetaspaceSize=160m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp -Duser.timezone=Asia/Shanghai}
+  deploy:
+    resources:
+      limits:
+        cpus: "0.75"
+        memory: 768M
+      reservations:
+        cpus: "0.25"
+        memory: 512M
+
+services:
+  mysql:
+    cpus: 1.00
+    mem_limit: 1g
+    mem_reservation: 768m
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1G
+        reservations:
+          cpus: "0.50"
+          memory: 768M
+
+  redis:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+
+  rabbitmq:
+    cpus: 0.50
+    mem_limit: 512m
+    mem_reservation: 384m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 384M
+
+  nacos:
+    cpus: 0.75
+    mem_limit: 768m
+    mem_reservation: 512m
+    environment:
+      JVM_XMS: ${NACOS_JVM_XMS_PROD:-256m}
+      JVM_XMX: ${NACOS_JVM_XMX_PROD:-512m}
+      JVM_XMN: ${NACOS_JVM_XMN_PROD:-128m}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+  elasticsearch:
+    cpus: 1.00
+    mem_limit: 1536m
+    mem_reservation: 1g
+    environment:
+      ES_JAVA_OPTS: ${ES_JAVA_OPTS_PROD:--Xms768m -Xmx768m}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1536M
+        reservations:
+          cpus: "0.50"
+          memory: 1G
+
+  zipkin:
+    cpus: 0.50
+    mem_limit: 512m
+    mem_reservation: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 256M
+
+  prometheus:
+    cpus: 0.50
+    mem_limit: 512m
+    mem_reservation: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 256M
+
+  grafana:
+    cpus: 0.25
+    mem_limit: 384m
+    mem_reservation: 192m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 384M
+        reservations:
+          cpus: "0.10"
+          memory: 192M
+
+  user-service:
+    <<: *java-service-limits
+
+  article-service:
+    <<: *java-service-limits
+
+  comment-service:
+    <<: *java-service-limits
+
+  notify-service:
+    <<: *java-service-limits
+
+  blog-gateway:
+    <<: *java-service-limits
+
+  blog-web:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+
+  https-proxy:
+    cpus: 0.10
+    mem_limit: 128m
+    mem_reservation: 64m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 64M

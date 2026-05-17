@@ -10,6 +10,9 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 @EnableFeignClients
 public class CommentServiceApplication {
 
+    /**
+     * 程序启动入口：启动当前模块的 Spring Boot 服务。
+     */
     public static void main(String[] args) {
         SpringApplication.run(CommentServiceApplication.class, args);
     }

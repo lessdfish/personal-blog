@@ -14,6 +14,9 @@ const list = ref<NotifyItem[]>([])
 const selected = ref<NotifyDetail | null>(null)
 const unread = computed(() => notifyStore.unread)
 
+/**
+ * 加载通知数据：请求通知列表并选中默认通知。
+ */
 async function loadData() {
   if (!authStore.isLoggedIn) {
     router.replace('/login')
@@ -24,6 +27,9 @@ async function loadData() {
   await notifyStore.refreshUnread()
 }
 
+/**
+ * 选择通知项：加载详情并同步已读状态。
+ */
 async function selectItem(item: NotifyItem) {
   selected.value = await getNotifyDetail(item.id)
   if (!item.isRead) {
@@ -39,6 +45,9 @@ async function selectItem(item: NotifyItem) {
   await loadData()
 }
 
+/**
+ * 全部已读：调用接口后刷新通知列表和未读数。
+ */
 async function readAll() {
   await markAllNotifyRead()
   list.value = list.value.map((item) => ({ ...item, isRead: 1 }))

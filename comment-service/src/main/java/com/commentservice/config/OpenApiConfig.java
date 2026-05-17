@@ -8,6 +8,9 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+    /**
+     * 配置 articleOpenAPI：为当前服务准备运行时需要的组件或参数。
+     */
 /**
  * ClassName:OpenApiConfig
  * Package:com.articleservice.config

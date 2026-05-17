@@ -11,6 +11,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!user.value)
 
+  /**
+   * 拉取当前用户：应用启动或刷新时恢复登录用户信息。
+   */
   async function fetchCurrentUser() {
     loading.value = true
     try {
@@ -22,6 +25,9 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value
   }
 
+  /**
+   * 执行登录流程：调用接口成功后保存用户信息。
+   */
   async function loginAction(payload: { username: string; password: string }) {
     loading.value = true
     try {
@@ -34,6 +40,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * 执行退出流程：调用后端退出接口并清理前端登录状态。
+   */
   async function logoutAction() {
     await logout()
     user.value = null
@@ -41,6 +50,9 @@ export const useAuthStore = defineStore('auth', () => {
     useNotifyStore().clearUnread()
   }
 
+  /**
+   * 执行资料更新流程：保存后端返回的新用户信息。
+   */
   async function updateCurrentUserAction(payload: { nickname?: string; avatar?: string; email?: string; phone?: string }) {
     loading.value = true
     try {
@@ -51,6 +63,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * 清理前端会话：移除用户信息并标记为未登录。
+   */
   function clearSession() {
     user.value = null
     initialized.value = true

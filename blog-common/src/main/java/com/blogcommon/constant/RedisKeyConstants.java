@@ -9,7 +9,10 @@ public final class RedisKeyConstants {
     }
 
     public static final String USER_TOKEN_KEY = "blog:user:token:";
-    public static final long USER_TOKEN_EXPIRE = 7 * 24 * 60 * 60;
+    public static final long USER_TOKEN_EXPIRE = 24 * 60 * 60;
+    public static final String USER_REFRESH_TOKEN_KEY = "blog:user:refresh:token:";
+    public static final String REFRESH_TOKEN_LOOKUP_KEY = "blog:refresh:lookup:";
+    public static final long USER_REFRESH_TOKEN_EXPIRE = 7 * 24 * 60 * 60;
 
     public static final String NOTIFY_UNREAD_KEY = "blog:notify:unread:";
     public static final long NOTIFY_UNREAD_EXPIRE = 5 * 60;
@@ -32,6 +35,7 @@ public final class RedisKeyConstants {
     public static final String LIMIT_COMMENT_KEY = "blog:limit:comment:";
     public static final long LIMIT_COMMENT_WINDOW = 60;
     public static final int LIMIT_COMMENT_THRESHOLD = 10;
+    public static final String SECURITY_BLOCK_IP_KEY = "blog:security:block-ip:";
 
     public static final String USER_ACTIVE_DAY_KEY = "blog:user:active:day:";
     public static final String USER_ACTIVE_WEEK_KEY = "blog:user:active:week:";

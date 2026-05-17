@@ -18,12 +18,15 @@ public class UserSqlProvider {
 
 
 
+        /**
+         * 执行 buildSelectUserList 数据库操作：由 MyBatis 根据注解或 SQL 访问数据表。
+         */
         public String buildSelectUserList(Map<String, Object> params) {
             String username = (String) params.get("username");
             Integer status = (Integer) params.get("status");
 
             return new SQL() {{
-                SELECT("*");
+                SELECT(UserMapper.USER_COLUMNS);
                 FROM("tb_user");
 
                 if (username != null && !username.trim().isEmpty()) {

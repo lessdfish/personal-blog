@@ -6,6 +6,7 @@ import com.blogcommon.exception.BusinessException;
 import com.blogcommon.logging.DbWriteAuditLogger;
 import com.blogcommon.message.ArticleInteractionNotifyMessage;
 import com.blogcommon.message.CommentNotifyMessage;
+import com.blogcommon.message.MqConstants;
 import com.notifyservice.config.UserContext;
 import com.notifyservice.dto.NotifyPageQueryDTO;
 import com.notifyservice.entity.Notify;
@@ -43,6 +44,9 @@ public class NotifyService {
     private static final int NOTIFY_TYPE_FAVORITE = 3;
 
     /**
+     * 处理评论通知消息：把评论事件转换成站内通知。
+     */
+    /**
      * 处理评论通知消息
      */
     public void handleCommentNotify(CommentNotifyMessage message) {
@@ -63,13 +67,17 @@ public class NotifyService {
         incrementUnreadCache(message.getReceiverId());
     }
 
+    /**
+     * 处理文章互动通知消息：把点赞或收藏事件转换成站内通知。
+     */
     public void handleArticleInteractionNotify(ArticleInteractionNotifyMessage message) {
         Notify notify = new Notify();
         notify.setUserId(message.getReceiverId());
         notify.setType(resolveInteractionType(message.getAction()));
         String senderName = defaultSenderName(message.getSenderName());
-        notify.setTitle("用户" + senderName + "，" + message.getAction() + "了你的文章");
-        notify.setContent(buildInteractionContent(senderName, message.getAction(), message.getArticleTitle(), null));
+        String actionText = resolveInteractionActionText(message.getAction());
+        notify.setTitle("用户" + senderName + "，" + actionText + "了你的文章");
+        notify.setContent(buildInteractionContent(senderName, actionText, message.getArticleTitle(), null));
         notify.setArticleId(message.getArticleId());
         notify.setSenderId(message.getSenderId());
 
@@ -90,6 +98,9 @@ public class NotifyService {
     }
 
     /**
+     * 减少未读数缓存：通知被读或删除后扣减未读数。
+     */
+    /**
      * 减少未读计数缓存
      */
     private void decrementUnreadCache(Long userId, long count) {
@@ -97,10 +108,17 @@ public class NotifyService {
             String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
             Long current = getUnreadCountFromCache(key);
             long next = Math.max(0L, current - count);
-            stringRedisTemplate.opsForValue().set(key, String.valueOf(next), RedisKeyConstants.NOTIFY_UNREAD_EXPIRE, TimeUnit.SECONDS);
+            stringRedisTemplate.opsForValue().set(
+                    key,
+                    String.valueOf(next),
+                    RedisKeyConstants.NOTIFY_UNREAD_EXPIRE,
+                    TimeUnit.SECONDS);
         }
     }
 
+    /**
+     * 删除未读数缓存：缓存不可靠时清掉，下次重新统计。
+     */
     /**
      * 删除未读计数缓存（标记全部已读时使用）
      */
@@ -111,6 +129,9 @@ public class NotifyService {
         }
     }
 
+    /**
+     * 分页查询用户通知：返回当前用户的通知列表。
+     */
     /**
      * 分页查询当前用户的通知列表
      */
@@ -124,7 +145,7 @@ public class NotifyService {
         int offset = (pageNum - 1) * pageSize;
 
         Long total = notifyMapper.countByUserId(userId);
-        if (total == null || total == 0) {
+        if (total == null || Long.valueOf(0L).equals(total)) {
             PageResult<NotifyListItemVO> empty = new PageResult<>();
             empty.setTotal(0L);
             empty.setList(Collections.emptyList());
@@ -139,6 +160,9 @@ public class NotifyService {
         return result;
     }
 
+    /**
+     * 查询详情：校验归属后返回指定记录的完整信息。
+     */
     public NotifyVO getDetail(Long userId, Long notifyId) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
@@ -150,6 +174,9 @@ public class NotifyService {
         return toVO(notify);
     }
 
+    /**
+     * 查询未读通知数：优先读缓存，缓存没有再查数据库。
+     */
     /**
      * 获取未读通知数量（带缓存）
      */
@@ -181,6 +208,9 @@ public class NotifyService {
     }
 
     /**
+     * 标记单条通知已读：更新数据库并同步未读数缓存。
+     */
+    /**
      * 标记单条通知为已读
      */
     public void markAsRead(Long userId, Long notifyId) {
@@ -197,7 +227,7 @@ public class NotifyService {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
-        if (notify.getIsRead() != null && notify.getIsRead() == 1) {
+        if (Integer.valueOf(1).equals(notify.getIsRead())) {
             syncUnreadCache(userId);
             return;
         }
@@ -210,6 +240,9 @@ public class NotifyService {
     }
 
     /**
+     * 标记全部通知已读：把当前用户所有未读通知改为已读。
+     */
+    /**
      * 标记所有通知为已读
      */
     public void markAllAsRead(Long userId) {
@@ -220,6 +253,9 @@ public class NotifyService {
         deleteUnreadCache(userId);
     }
 
+    /**
+     * 删除数据：校验权限后删除或标记删除指定记录。
+     */
     /**
      * 删除通知
      */
@@ -241,11 +277,14 @@ public class NotifyService {
             throw new BusinessException(ResultCode.NOTIFY_DELETE_FAILED);
         }
 
-        if (notify.getIsRead() != null && notify.getIsRead() == 0) {
+        if (Integer.valueOf(0).equals(notify.getIsRead())) {
             syncUnreadCache(userId);
         }
     }
 
+    /**
+     * 同步未读数缓存：用数据库统计值刷新 Redis 缓存。
+     */
     private void syncUnreadCache(Long userId) {
         if (stringRedisTemplate == null || userId == null) {
             return;
@@ -259,6 +298,9 @@ public class NotifyService {
                 TimeUnit.SECONDS);
     }
 
+    /**
+     * 从缓存读取未读数：解析失败时返回 0。
+     */
     private long getUnreadCountFromCache(String key) {
         if (stringRedisTemplate == null) {
             return 0L;
@@ -274,17 +316,36 @@ public class NotifyService {
         }
     }
 
+    /**
+     * 解析互动通知类型：根据点赞或收藏动作确定通知类型值。
+     */
     private Integer resolveInteractionType(String action) {
-        if ("收藏".equals(action)) {
+        if (MqConstants.ARTICLE_INTERACTION_ACTION_FAVORITE.equals(action)) {
             return NOTIFY_TYPE_FAVORITE;
         }
         return NOTIFY_TYPE_LIKE;
     }
 
+    /**
+     * 解析互动动作文案：把动作编码转换成用户能看懂的文字。
+     */
+    private String resolveInteractionActionText(String action) {
+        if (MqConstants.ARTICLE_INTERACTION_ACTION_FAVORITE.equals(action)) {
+            return "收藏";
+        }
+        return "点赞";
+    }
+
+    /**
+     * 生成默认发送人名称：发送人名称为空时使用兜底文案。
+     */
     private String defaultSenderName(String senderName) {
         return senderName == null || senderName.isBlank() ? "有用户" : senderName;
     }
 
+    /**
+     * 拼接互动通知内容：生成展示给接收者看的通知正文。
+     */
     private String buildInteractionContent(String senderName, String action, String articleTitle, String extraContent) {
         StringBuilder builder = new StringBuilder()
                 .append("用户")
@@ -300,6 +361,9 @@ public class NotifyService {
         return builder.toString();
     }
 
+    /**
+     * 转换返回对象：把数据库实体转换成前端需要的 VO。
+     */
     private NotifyVO toVO(Notify notify) {
         NotifyVO vo = new NotifyVO();
         vo.setId(notify.getId());

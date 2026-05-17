@@ -4,6 +4,7 @@ import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
 import com.blogcommon.logging.DbWriteAuditLogger;
+import com.blogcommon.auth.RequestUserContext;
 import com.blogcommon.util.JwtUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,17 +35,11 @@ import com.userservice.vo.UserInfoVO;
 import com.userservice.vo.UserSimpleVO;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -53,15 +48,18 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
     private static final DateTimeFormatter DAY_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final long MAX_AVATAR_SIZE = 5L * 1024 * 1024;
 
     @Autowired
     private UserMapper userMapper;
@@ -77,9 +75,14 @@ public class UserService {
     private UserActivityService userActivityService;
     @Autowired
     private RolePermissionCacheService rolePermissionCacheService;
-    @Value("${app.avatar.upload-dir}")
-    private String avatarUploadDir;
+    @Autowired
+    private JwtUtil jwtUtil;
+    @Autowired
+    private AvatarStorageService avatarStorageService;
 
+    /**
+     * 注册用户：校验注册信息，加密密码，然后保存新用户。
+     */
     public void register(RegisterDTO registerDTO) {
         User dbUser = userMapper.selectByUsername(registerDTO.getUsername());
         if (dbUser != null) {
@@ -104,6 +107,9 @@ public class UserService {
         DbWriteAuditLogger.logInsert("tb_user", user);
     }
 
+    /**
+     * 检查字段是否可用：判断用户名、昵称、邮箱或手机号是否已被占用。
+     */
     public boolean isFieldAvailable(String field, String value) {
         if (field == null || field.isBlank() || value == null || value.isBlank()) {
             throw new BusinessException(ResultCode.PARAM_NULL.getCode(), "校验字段和值不能为空");
@@ -117,6 +123,9 @@ public class UserService {
         };
     }
 
+    /**
+     * 用户登录：校验账号密码，生成 token，并返回登录用户信息。
+     */
     public LoginVO login(LoginDTO loginDTO) {
         User dbUser = userMapper.selectByUsername(loginDTO.getUsername());
         if (dbUser == null) {
@@ -126,24 +135,30 @@ public class UserService {
         if (role == null) {
             throw new BusinessException(ResultCode.ROLE_NULL);
         }
-        if (dbUser.getStatus() != null && dbUser.getStatus() == 0) {
+        if (Integer.valueOf(0).equals(dbUser.getStatus())) {
             throw new BusinessException(ResultCode.USER_DISABLED);
         }
         if (!passwordEncoder.matches(loginDTO.getPassword(), dbUser.getPassword())) {
             throw new BusinessException(ResultCode.PASSWORD_ERROR);
         }
 
-        String token = JwtUtil.createToken(dbUser.getId(), dbUser.getUsername(), role.getRoleCode());
+        String token = jwtUtil.createToken(dbUser.getId(), dbUser.getUsername(), role.getRoleCode());
+        String refreshToken = UUID.randomUUID().toString();
         cacheToken(dbUser.getId(), token);
+        cacheRefreshToken(dbUser.getId(), refreshToken);
         userActivityService.recordActivity(dbUser.getId());
 
         LoginUserVO loginUserVO = UserConverter.toLoginUserVO(dbUser);
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(token);
+        loginVO.setRefreshToken(refreshToken);
         loginVO.setUser(loginUserVO);
         return loginVO;
     }
 
+    /**
+     * 缓存访问 token：保存用户当前有效的登录凭证。
+     */
     private void cacheToken(Long userId, String token) {
         if (stringRedisTemplate != null) {
             String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
@@ -151,6 +166,27 @@ public class UserService {
         }
     }
 
+    /**
+     * 缓存刷新 token：保存用于续期登录的凭证。
+     */
+    private void cacheRefreshToken(Long userId, String refreshToken) {
+        if (stringRedisTemplate != null) {
+            stringRedisTemplate.opsForValue().set(
+                    RedisKeyConstants.USER_REFRESH_TOKEN_KEY + userId,
+                    refreshToken,
+                    RedisKeyConstants.USER_REFRESH_TOKEN_EXPIRE,
+                    TimeUnit.SECONDS);
+            stringRedisTemplate.opsForValue().set(
+                    RedisKeyConstants.REFRESH_TOKEN_LOOKUP_KEY + refreshToken,
+                    userId.toString(),
+                    RedisKeyConstants.USER_REFRESH_TOKEN_EXPIRE,
+                    TimeUnit.SECONDS);
+        }
+    }
+
+    /**
+     * 校验 token 是否仍然有效：常用于网关或其他服务确认登录状态。
+     */
     public boolean validateToken(Long userId, String token) {
         if (stringRedisTemplate == null) {
             return true;
@@ -160,19 +196,27 @@ public class UserService {
         return token != null && token.equals(cachedToken);
     }
 
+    /**
+     * 退出登录：清理当前用户的登录状态和 token。
+     */
     public void logout(Long userId) {
         if (stringRedisTemplate != null && userId != null) {
             String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
+            deleteRefreshToken(userId);
             stringRedisTemplate.delete(key);
             stringRedisTemplate.delete(RedisKeyConstants.USER_ONLINE_KEY + userId);
             stringRedisTemplate.delete(RedisKeyConstants.USER_SESSION_INFO_KEY + userId);
         }
     }
 
+    /**
+     * 强制用户下线：管理员让指定用户的 token 失效。
+     */
     public void kickout(Long userId) {
         if (userId == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
         }
+        requireAdmin();
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_EXIST);
@@ -180,6 +224,9 @@ public class UserService {
         logout(userId);
     }
 
+    /**
+     * 刷新登录令牌：为用户生成新的访问 token。
+     */
     public void refreshToken(Long userId) {
         if (stringRedisTemplate != null && userId != null) {
             String key = RedisKeyConstants.USER_TOKEN_KEY + userId;
@@ -189,6 +236,63 @@ public class UserService {
         userActivityService.recordActivity(userId);
     }
 
+    /**
+     * 根据刷新 token 重新签发访问 token。
+     */
+    public LoginVO refreshAccessToken(String refreshToken) {
+        if (stringRedisTemplate == null || refreshToken == null || refreshToken.isBlank()) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
+        }
+        String userIdText = stringRedisTemplate.opsForValue().get(RedisKeyConstants.REFRESH_TOKEN_LOOKUP_KEY + refreshToken);
+        if (userIdText == null || userIdText.isBlank()) {
+            throw new BusinessException(ResultCode.TOKEN_INVALID);
+        }
+        Long userId = Long.valueOf(userIdText);
+        String cachedRefreshToken = stringRedisTemplate.opsForValue().get(RedisKeyConstants.USER_REFRESH_TOKEN_KEY + userId);
+        if (!refreshToken.equals(cachedRefreshToken)) {
+            throw new BusinessException(ResultCode.TOKEN_INVALID);
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_EXIST);
+        }
+        if (Integer.valueOf(0).equals(user.getStatus())) {
+            throw new BusinessException(ResultCode.USER_DISABLED);
+        }
+        Role role = roleMapper.selectById(user.getRoleId());
+        if (role == null) {
+            throw new BusinessException(ResultCode.ROLE_NULL);
+        }
+
+        stringRedisTemplate.delete(RedisKeyConstants.REFRESH_TOKEN_LOOKUP_KEY + refreshToken);
+        String newAccessToken = jwtUtil.createToken(user.getId(), user.getUsername(), role.getRoleCode());
+        String newRefreshToken = UUID.randomUUID().toString();
+        cacheToken(user.getId(), newAccessToken);
+        cacheRefreshToken(user.getId(), newRefreshToken);
+        userActivityService.recordActivity(user.getId());
+
+        LoginVO loginVO = new LoginVO();
+        loginVO.setToken(newAccessToken);
+        loginVO.setRefreshToken(newRefreshToken);
+        loginVO.setUser(UserConverter.toLoginUserVO(user));
+        return loginVO;
+    }
+
+    /**
+     * 删除刷新 token：用户退出或令牌失效时调用。
+     */
+    private void deleteRefreshToken(Long userId) {
+        String refreshToken = stringRedisTemplate.opsForValue().get(RedisKeyConstants.USER_REFRESH_TOKEN_KEY + userId);
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            stringRedisTemplate.delete(RedisKeyConstants.REFRESH_TOKEN_LOOKUP_KEY + refreshToken);
+        }
+        stringRedisTemplate.delete(RedisKeyConstants.USER_REFRESH_TOKEN_KEY + userId);
+    }
+
+    /**
+     * 获取 currentUserInfo：返回当前对象里保存的这个值。
+     */
     public CurrentUserVO getCurrentUserInfo(Long userId) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
@@ -202,6 +306,9 @@ public class UserService {
         return vo;
     }
 
+    /**
+     * 业务方法 recordSessionInfo：封装 UserService 中对应的核心处理流程。
+     */
     public void recordSessionInfo(String username, HttpServletRequest request) {
         if (stringRedisTemplate == null || request == null || username == null || username.isBlank()) {
             return;
@@ -221,6 +328,9 @@ public class UserService {
         }
     }
 
+    /**
+     * 业务方法 updateCurrentUserInfo：封装 UserService 中对应的核心处理流程。
+     */
     public void updateCurrentUserInfo(Long userId, UpdateUserInfoDTO updateUserInfoDTO) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
@@ -248,33 +358,16 @@ public class UserService {
         }
     }
 
+    /**
+     * 业务方法 uploadAvatar：封装 UserService 中对应的核心处理流程。
+     */
     public String uploadAvatar(Long userId, MultipartFile file) {
-        if (userId == null) {
-            throw new BusinessException(ResultCode.UNAUTHORIZED);
-        }
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "请选择头像文件");
-        }
-        if (file.getSize() > MAX_AVATAR_SIZE) {
-            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "头像大小不能超过5MB");
-        }
-
-        String extension = resolveAvatarExtension(file.getOriginalFilename(), file.getContentType());
-        String filename = userId + "-" + UUID.randomUUID().toString().replace("-", "") + extension;
-
-        try {
-            Path uploadDir = Path.of(avatarUploadDir);
-            Files.createDirectories(uploadDir);
-            try (InputStream inputStream = file.getInputStream()) {
-                Files.copy(inputStream, uploadDir.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException e) {
-            throw new BusinessException(ResultCode.USER_UPDATE_FAILED.getCode(), "头像上传失败");
-        }
-
-        return "/api/user/avatar/" + filename;
+        return avatarStorageService.store(userId, file);
     }
 
+    /**
+     * 修改密码：校验旧密码后保存新密码。
+     */
     public void updatePassword(Long userId, UpdatePasswordDTO updatePasswordDTO) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
@@ -299,6 +392,9 @@ public class UserService {
         }
     }
 
+    /**
+     * 通过手机号重置密码：校验用户和手机号后设置新密码。
+     */
     public void resetPasswordByPhone(ResetPasswordByPhoneDTO dto) {
         User dbUser = userMapper.selectByUsername(dto.getUsername());
         if (dbUser == null) {
@@ -319,6 +415,9 @@ public class UserService {
         logout(dbUser.getId());
     }
 
+    /**
+     * 分页查询用户：管理员按条件查看用户列表。
+     */
     public PageVO<UserInfoVO> pageUsers(UserPageQueryDTO queryDTO) {
         if (queryDTO == null) {
             throw new BusinessException(ResultCode.PARAM_NOT_NULL);
@@ -335,11 +434,17 @@ public class UserService {
 
         Page<User> page = PageHelper.startPage(pageNum, pageSize);
         List<User> userList = userMapper.selectUserListByCondition(queryDTO.getUsername(), queryDTO.getStatus());
+        List<Long> roleIds = userList.stream()
+                .map(User::getRoleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, Role> roleMap = roleIds.isEmpty()
+                ? Map.of()
+                : roleMapper.selectByIds(roleIds).stream()
+                .collect(Collectors.toMap(Role::getId, r -> r));
         List<UserInfoVO> userInfoVOList = userList.stream()
-                .map(user -> {
-                    Role role = roleMapper.selectById(user.getRoleId());
-                    return UserConverter.toUserInfoVO(user, role);
-                })
+                .map(user -> UserConverter.toUserInfoVO(user, roleMap.get(user.getRoleId())))
                 .toList();
 
         PageVO<UserInfoVO> pageVO = new PageVO<>();
@@ -348,6 +453,9 @@ public class UserService {
         return pageVO;
     }
 
+    /**
+     * 更新用户状态：管理员启用或禁用某个用户。
+     */
     public void updateUserStatus(UpdateUserStatusDTO updateUserStatusDTO) {
         if (updateUserStatusDTO == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
@@ -358,6 +466,7 @@ public class UserService {
         if (status == null || (status != 0 && status != 1)) {
             throw new BusinessException(ResultCode.USER_STATUS_INVALID);
         }
+        requireAdmin();
 
         User dbUser = userMapper.selectById(userId);
         if (dbUser == null) {
@@ -370,10 +479,14 @@ public class UserService {
         }
     }
 
+    /**
+     * 更新用户角色：管理员调整某个用户的角色。
+     */
     public void updateUserRole(UpdateUserRoleDTO dto) {
         if (dto == null || dto.getUserId() == null || dto.getRoleId() == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
         }
+        requireAdmin();
         User dbUser = userMapper.selectById(dto.getUserId());
         if (dbUser == null) {
             throw new BusinessException(ResultCode.USER_NOT_EXIST);
@@ -389,6 +502,9 @@ public class UserService {
         logout(dto.getUserId());
     }
 
+    /**
+     * 业务方法 listRolesWithPermissions：封装 UserService 中对应的核心处理流程。
+     */
     public List<RolePermissionVO> listRolesWithPermissions() {
         return roleMapper.selectAll().stream()
                 .map(role -> {
@@ -403,6 +519,9 @@ public class UserService {
                 .toList();
     }
 
+    /**
+     * 获取 activeUserSummary：返回当前对象里保存的这个值。
+     */
     public ActiveUserSummaryVO getActiveUserSummary() {
         ActiveUserSummaryVO vo = new ActiveUserSummaryVO();
         if (stringRedisTemplate == null) {
@@ -421,6 +540,9 @@ public class UserService {
         return vo;
     }
 
+    /**
+     * 业务方法 listActiveUsers：封装 UserService 中对应的核心处理流程。
+     */
     public List<ActiveUserVO> listActiveUsers(Integer limit) {
         if (stringRedisTemplate == null) {
             return List.of();
@@ -455,6 +577,9 @@ public class UserService {
         return result;
     }
 
+    /**
+     * 批量查询用户简要信息：给文章、评论等服务展示用户名和头像。
+     */
     public List<UserSimpleVO> getBatchUserSimple(List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return List.of();
@@ -469,6 +594,9 @@ public class UserService {
         }).toList();
     }
 
+    /**
+     * 获取 permissionCodes：返回当前对象里保存的这个值。
+     */
     private List<String> getPermissionCodes(Long roleId, String roleCode) {
         List<String> permissionCodes = rolePermissionCacheService.getPermissionCodesByRoleId(roleId);
         if (!permissionCodes.isEmpty()) {
@@ -477,16 +605,47 @@ public class UserService {
         return rolePermissionCacheService.getPermissionCodesByRoleCode(roleCode);
     }
 
+    /**
+     * 校验当前用户是否管理员，不是管理员就抛出无权限异常。
+     */
+    private void requireAdmin() {
+        if (!"ADMIN".equals(RequestUserContext.getRole())) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+    }
+
+    /**
+     * 业务方法 sizeOfSet：封装 UserService 中对应的核心处理流程。
+     */
     private Long sizeOfSet(String key) {
         Long size = stringRedisTemplate.opsForSet().size(key);
         return size == null ? 0L : size;
     }
 
+    /**
+     * 业务方法 countOnlineUsers：封装 UserService 中对应的核心处理流程。
+     */
     private Long countOnlineUsers() {
-        Collection<String> keys = stringRedisTemplate.keys(RedisKeyConstants.USER_ONLINE_KEY + "*");
-        return keys == null ? 0L : (long) keys.size();
+        AtomicLong count = new AtomicLong(0);
+        stringRedisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+            try (var cursor = connection.scan(
+                    org.springframework.data.redis.core.ScanOptions.scanOptions()
+                            .match(RedisKeyConstants.USER_ONLINE_KEY + "*")
+                            .count(200)
+                            .build())) {
+                while (cursor.hasNext()) {
+                    count.incrementAndGet();
+                    cursor.next();
+                }
+            }
+            return null;
+        });
+        return count.get();
     }
 
+    /**
+     * 获取 sessionInfo：返回当前对象里保存的这个值。
+     */
     private SessionInfoVO getSessionInfo(Long userId) {
         if (stringRedisTemplate == null || userId == null) {
             return null;
@@ -502,6 +661,9 @@ public class UserService {
         }
     }
 
+    /**
+     * 业务方法 buildSessionInfo：封装 UserService 中对应的核心处理流程。
+     */
     private SessionInfoVO buildSessionInfo(HttpServletRequest request) {
         String userAgent = safeHeader(request, "User-Agent");
         String ip = resolveClientIp(request);
@@ -515,11 +677,17 @@ public class UserService {
         return sessionInfo;
     }
 
+    /**
+     * 业务方法 safeHeader：封装 UserService 中对应的核心处理流程。
+     */
     private String safeHeader(HttpServletRequest request, String headerName) {
         String value = request.getHeader(headerName);
         return value == null || value.isBlank() ? "未知" : value;
     }
 
+    /**
+     * 业务方法 resolveClientIp：封装 UserService 中对应的核心处理流程。
+     */
     private String resolveClientIp(HttpServletRequest request) {
         String forwardedFor = request.getHeader("X-Forwarded-For");
         if (forwardedFor != null && !forwardedFor.isBlank()) {
@@ -533,6 +701,9 @@ public class UserService {
         return remoteAddr == null || remoteAddr.isBlank() ? "未知" : remoteAddr;
     }
 
+    /**
+     * 业务方法 resolveLocation：封装 UserService 中对应的核心处理流程。
+     */
     private String resolveLocation(String ip) {
         if (ip == null || ip.isBlank() || "未知".equals(ip)) {
             return "未知位置";
@@ -549,6 +720,9 @@ public class UserService {
         return "公网 IP";
     }
 
+    /**
+     * 业务方法 resolveDevice：封装 UserService 中对应的核心处理流程。
+     */
     private String resolveDevice(String userAgent) {
         String source = userAgent == null ? "" : userAgent.toLowerCase(Locale.ROOT);
         if (source.contains("iphone")) {
@@ -572,6 +746,9 @@ public class UserService {
         return "未知设备";
     }
 
+    /**
+     * 业务方法 resolveBrowser：封装 UserService 中对应的核心处理流程。
+     */
     private String resolveBrowser(String userAgent) {
         String source = userAgent == null ? "" : userAgent.toLowerCase(Locale.ROOT);
         if (source.contains("edg/")) {
@@ -592,34 +769,9 @@ public class UserService {
         return "未知浏览器";
     }
 
-    private String resolveAvatarExtension(String originalFilename, String contentType) {
-        String extension = "";
-        if (originalFilename != null) {
-            int lastDotIndex = originalFilename.lastIndexOf('.');
-            if (lastDotIndex >= 0) {
-                extension = originalFilename.substring(lastDotIndex).toLowerCase(Locale.ROOT);
-            }
-        }
-
-        return switch (extension) {
-            case ".jpg", ".jpeg", ".png", ".webp", ".gif" -> extension;
-            default -> mapContentTypeToExtension(contentType);
-        };
-    }
-
-    private String mapContentTypeToExtension(String contentType) {
-        if (contentType == null) {
-            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "仅支持 jpg、jpeg、png、webp、gif 格式头像");
-        }
-        return switch (contentType.toLowerCase(Locale.ROOT)) {
-            case "image/jpeg", "image/jpg" -> ".jpg";
-            case "image/png" -> ".png";
-            case "image/webp" -> ".webp";
-            case "image/gif" -> ".gif";
-            default -> throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "仅支持 jpg、jpeg、png、webp、gif 格式头像");
-        };
-    }
-
+    /**
+     * 业务方法 validateUniqueProfileFields：封装 UserService 中对应的核心处理流程。
+     */
     private void validateUniqueProfileFields(String nickname, String email, String phone, Long excludeUserId) {
         if (nickname != null && !nickname.isBlank()) {
             User nicknameOwner = excludeUserId == null

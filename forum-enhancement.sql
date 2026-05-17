@@ -10,7 +10,11 @@ ALTER TABLE tb_article
     ADD COLUMN IF NOT EXISTS favorite_count INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_top TINYINT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_essence TINYINT DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS allow_comment TINYINT DEFAULT 1;
+    ADD COLUMN IF NOT EXISTS allow_comment TINYINT DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS hot_score DOUBLE DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS hot_adjust_score DOUBLE DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS hot_decay_enabled TINYINT DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS last_hot_refresh_time DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS tb_board (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -33,6 +37,7 @@ CREATE TABLE IF NOT EXISTS tb_article_favorite (
 
 CREATE INDEX idx_article_status_top_board_id ON tb_article(status, is_top, board_id, id);
 CREATE INDEX idx_article_author_status_id ON tb_article(author_id, status, id);
+CREATE INDEX idx_article_status_hot_score ON tb_article(status, hot_score, id);
 CREATE INDEX idx_comment_article_status_parent_id ON tb_comment(article_id, status, parent_id, id);
 CREATE INDEX idx_notify_user_read_time ON tb_notify(user_id, is_read, create_time);
 CREATE INDEX idx_favorite_user_article ON tb_article_favorite(user_id, article_id);

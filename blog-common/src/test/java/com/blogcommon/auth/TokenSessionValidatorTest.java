@@ -101,4 +101,29 @@ class TokenSessionValidatorTest {
 
         assertFalse(validator.isTokenActive(5L, "token-5"));
     }
+
+    @Test
+    void shouldEvictExpiredTokensOnCleanup() {
+        TokenSessionValidator validator = new TokenSessionValidator();
+        StringRedisTemplate template = mock(StringRedisTemplate.class);
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(template.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("blog:user:token:6")).thenReturn("token-6");
+        ReflectionTestUtils.setField(validator, "stringRedisTemplate", template);
+        ReflectionTestUtils.setField(validator, "localCacheSeconds", 300L);
+
+        assertTrue(validator.isTokenActive(6L, "token-6"));
+
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Long> localTokenCache =
+                (java.util.Map<String, Long>) ReflectionTestUtils.getField(validator, "localTokenCache");
+        localTokenCache.put("blog:user:token:expired:token", System.currentTimeMillis() - 10000);
+        localTokenCache.put("blog:user:token:valid:token", System.currentTimeMillis() + 300000);
+
+        ReflectionTestUtils.invokeMethod(validator, "evictExpiredTokens");
+
+        assertFalse(localTokenCache.containsKey("blog:user:token:expired:token"));
+        assertTrue(localTokenCache.containsKey("blog:user:token:valid:token"));
+    }
 }

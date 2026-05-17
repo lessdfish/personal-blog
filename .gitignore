@@ -15,6 +15,7 @@ target/
 
 ### IntelliJ IDEA ###
 .idea
+.run/
 *.iws
 *.iml
 *.ipr
@@ -34,9 +35,34 @@ build/
 .m2/
 run-logs/
 **/run-logs/
+
+### Runtime logs and dumps ###
+logs/
+**/logs/
+*.log
+*.hprof
+*.dump
+*.dumpstream
+*.stackdump
+hs_err_pid*.log
+replay_pid*.log
+
+### Environment and local secrets ###
 .env
-.env.example
+.env.*
+!.env.example
+!.env.example*
 blog-web/.env.local
-blog-web/dist/
 **/application-local.yml
 **/application-secrets.yml
+
+### Frontend local artifacts ###
+blog-web/node_modules/
+blog-web/dist/
+
+### Local Docker and Jenkins artifacts ###
+docker-compose.override.yml
+docker-compose.*.local.yml
+.jenkins/
+jenkins_home/
+deploy/backup/output/

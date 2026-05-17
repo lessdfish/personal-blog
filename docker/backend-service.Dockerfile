@@ -2,6 +2,8 @@
 
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 ARG SERVICE_MODULE
+ARG MAVEN_OPTS="-Xmx768m -XX:MaxMetaspaceSize=256m -XX:+UseSerialGC"
+ENV MAVEN_OPTS=${MAVEN_OPTS}
 WORKDIR /workspace
 
 COPY pom.xml ./
@@ -12,7 +14,7 @@ COPY article-service/pom.xml article-service/pom.xml
 COPY comment-service/pom.xml comment-service/pom.xml
 COPY notify-service/pom.xml notify-service/pom.xml
 
-RUN mvn -pl ${SERVICE_MODULE} -am dependency:go-offline -DskipTests
+RUN mvn -ntp -pl ${SERVICE_MODULE} -am dependency:go-offline -DskipTests
 
 COPY blog-common blog-common
 COPY blog-gateway blog-gateway
@@ -21,7 +23,7 @@ COPY article-service article-service
 COPY comment-service comment-service
 COPY notify-service notify-service
 
-RUN mvn -pl ${SERVICE_MODULE} -am clean package -DskipTests
+RUN mvn -ntp -pl ${SERVICE_MODULE} -am clean package -DskipTests -Dmaven.test.skip=true -Djacoco.skip=true
 
 FROM eclipse-temurin:17-jre-jammy
 ARG SERVICE_MODULE

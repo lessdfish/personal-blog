@@ -4,8 +4,8 @@ server:
 spring:
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 5MB
+      max-file-size: ${AVATAR_MAX_FILE_SIZE:5MB}
+      max-request-size: ${AVATAR_MAX_FILE_SIZE:5MB}
 
 pagehelper:
   helperDialect: mysql
@@ -32,4 +32,6 @@ logging:
 app:
   avatar:
     upload-dir: ${AVATAR_UPLOAD_DIR:/app/data/avatars}
-
+    max-size-bytes: ${AVATAR_MAX_SIZE_BYTES:5242880}
+    allowed-extensions: jpg,jpeg,png,webp,gif
+    allowed-content-types: image/jpeg,image/png,image/webp,image/gif

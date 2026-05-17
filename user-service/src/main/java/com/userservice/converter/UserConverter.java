@@ -21,6 +21,9 @@ import java.util.List;
 
 public class UserConverter {
 
+    /**
+     * 转换 toLoginUserVO 数据：把一种对象结构整理成另一种返回结构。
+     */
     public static LoginUserVO toLoginUserVO(User user) {
         if (user == null) {
             return null;
@@ -32,6 +35,9 @@ public class UserConverter {
         return vo;
     }
 
+    /**
+     * 转换 toCurrentUserVO 数据：把一种对象结构整理成另一种返回结构。
+     */
     public static CurrentUserVO toCurrentUserVO(User user) {
         if (user == null) {
             return null;
@@ -46,6 +52,9 @@ public class UserConverter {
         return vo;
     }
 
+    /**
+     * 转换 toUserInfoVO 数据：把一种对象结构整理成另一种返回结构。
+     */
     public static UserInfoVO toUserInfoVO(User user) {
         if (user == null) {
             return null;
@@ -63,6 +72,9 @@ public class UserConverter {
         return vo;
     }
 
+    /**
+     * 转换 toUserInfoVO 数据：把一种对象结构整理成另一种返回结构。
+     */
     public static UserInfoVO toUserInfoVO(User user,Role role){
         UserInfoVO vo = toUserInfoVO(user);
         if (vo != null && role != null) {
@@ -72,6 +84,9 @@ public class UserConverter {
         return vo;
     }
 
+    /**
+     * 转换 toUserInfoVO 数据：把一种对象结构整理成另一种返回结构。
+     */
     public static UserInfoVO toUserInfoVO(User user, Role role, List<String> permissionCodes){
         UserInfoVO vo = toUserInfoVO(user, role);
         if (vo != null) {

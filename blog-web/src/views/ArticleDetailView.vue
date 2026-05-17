@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Pointer, Star } from '@element-plus/icons-vue'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { createComment, getCommentPage } from '../api/comment'
@@ -39,6 +40,9 @@ const renderedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
+/**
+ * 加载文章详情：同时获取正文、评论和互动状态。
+ */
 async function loadDetail() {
   loading.value = true
   try {
@@ -58,11 +62,18 @@ async function loadDetail() {
       liked.value = false
       favorited.value = false
     }
+  } catch {
+    article.value = null
+    comments.value = []
+    ElMessage.error('文章加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
 }
 
+/**
+ * 提交评论：校验输入后创建评论并刷新评论列表。
+ */
 async function submitComment() {
   if (!authStore.isLoggedIn) {
     ElMessage.warning('请先登录后再评论')
@@ -72,19 +83,28 @@ async function submitComment() {
     ElMessage.warning('请输入评论内容')
     return
   }
-  await createComment({ articleId: articleId.value, parentId: replyParentId.value, content: commentText.value })
-  ElMessage.success(replyParentId.value ? '回复成功' : '评论成功')
-  commentText.value = ''
-  replyParentId.value = undefined
-  await loadDetail()
+  try {
+    await createComment({ articleId: articleId.value, parentId: replyParentId.value, content: commentText.value })
+    ElMessage.success(replyParentId.value ? '回复成功' : '评论成功')
+    commentText.value = ''
+    replyParentId.value = undefined
+    await loadDetail()
+  } catch {
+    ElMessage.error('评论提交失败，请稍后重试')
+  }
 }
 
+/**
+ * 处理点赞按钮点击：根据当前状态执行点赞或取消点赞。
+ */
 async function doLike() {
   if (!authStore.isLoggedIn) {
     ElMessage.warning('请先登录后再操作')
     return
   }
   interactionLoading.value = true
+  const previousState = liked.value
+  let appliedDelta = 0
   try {
     const nextState = !liked.value
     if (nextState) {
@@ -94,26 +114,32 @@ async function doLike() {
     }
     liked.value = nextState
     if (article.value) {
-      article.value.likeCount = Math.max(0, (article.value.likeCount || 0) + (nextState ? 1 : -1))
+      appliedDelta = nextState ? 1 : -1
+      article.value.likeCount = Math.max(0, (article.value.likeCount || 0) + appliedDelta)
     }
-    const [detail, likedState] = await Promise.all([
-      getArticleDetail(articleId.value),
-      hasLikedArticle(articleId.value).catch(() => nextState),
-    ])
-    article.value = detail
-    liked.value = likedState
     ElMessage.success(nextState ? '点赞成功' : '已取消点赞')
+  } catch {
+    liked.value = previousState
+    if (article.value && appliedDelta !== 0) {
+      article.value.likeCount = Math.max(0, (article.value.likeCount || 0) - appliedDelta)
+    }
+    ElMessage.error('操作失败，请稍后重试')
   } finally {
     interactionLoading.value = false
   }
 }
 
+/**
+ * 处理收藏按钮点击：根据当前状态执行收藏或取消收藏。
+ */
 async function doFavorite() {
   if (!authStore.isLoggedIn) {
     ElMessage.warning('请先登录后再操作')
     return
   }
   interactionLoading.value = true
+  const previousState = favorited.value
+  let appliedDelta = 0
   try {
     const nextState = !favorited.value
     if (nextState) {
@@ -123,20 +149,24 @@ async function doFavorite() {
     }
     favorited.value = nextState
     if (article.value) {
-      article.value.favoriteCount = Math.max(0, (article.value.favoriteCount || 0) + (nextState ? 1 : -1))
+      appliedDelta = nextState ? 1 : -1
+      article.value.favoriteCount = Math.max(0, (article.value.favoriteCount || 0) + appliedDelta)
     }
-    const [detail, favoritedState] = await Promise.all([
-      getArticleDetail(articleId.value),
-      hasFavoritedArticle(articleId.value).catch(() => nextState),
-    ])
-    article.value = detail
-    favorited.value = favoritedState
     ElMessage.success(nextState ? '收藏成功' : '已取消收藏')
+  } catch {
+    favorited.value = previousState
+    if (article.value && appliedDelta !== 0) {
+      article.value.favoriteCount = Math.max(0, (article.value.favoriteCount || 0) - appliedDelta)
+    }
+    ElMessage.error('操作失败，请稍后重试')
   } finally {
     interactionLoading.value = false
   }
 }
 
+/**
+ * 设置回复目标：让评论输入框进入回复某条评论的状态。
+ */
 function replyTo(comment: CommentItem) {
   if (!authStore.isLoggedIn) {
     ElMessage.warning('请先登录后再回复')
@@ -145,6 +175,9 @@ function replyTo(comment: CommentItem) {
   replyParentId.value = comment.id
 }
 
+/**
+ * 格式化完整时间：把后端时间转成页面展示的日期时间。
+ */
 function formatAbsoluteTime(value?: string) {
   if (!value) {
     return '--'
@@ -152,6 +185,13 @@ function formatAbsoluteTime(value?: string) {
   return value.replace('T', ' ')
 }
 
+function formatHeatScore(value?: number) {
+  return (value ?? 0).toFixed(2)
+}
+
+/**
+ * 格式化相对时间：把时间转换成刚刚、几分钟前等展示文案。
+ */
 function formatRelativeTime(value?: string) {
   if (!value) {
     return ''
@@ -173,10 +213,16 @@ function formatRelativeTime(value?: string) {
   return `${Math.floor(diff / day)}天前`
 }
 
+/**
+ * 获取评论作者名称：没有昵称时使用兜底展示。
+ */
 function commentAuthorName(comment: CommentItem) {
   return comment.userName || `用户${comment.userId}`
 }
 
+/**
+ * 获取评论头像：没有头像时返回默认头像。
+ */
 function commentAvatar(comment: CommentItem) {
   return comment.userAvatar || '/forum-fantasy-girl.jpg'
 }
@@ -212,18 +258,18 @@ onMounted(loadDetail)
         </div>
         <div class="detail-stat-chip">
           <span>热度</span>
-          <strong>{{ article.heatScore || 0 }}</strong>
+          <strong>{{ formatHeatScore(article.heatScore) }}</strong>
         </div>
       </div>
       <div class="article-content article-content--detail markdown-content" v-html="renderedContent"></div>
       <div class="interaction-bar">
         <button class="interaction-chip" :class="{ 'is-active': liked }" :disabled="interactionLoading" @click="doLike">
-          <span class="interaction-chip__icon">👍</span>
+          <el-icon class="interaction-chip__icon"><Pointer /></el-icon>
           <span>点赞</span>
           <strong>{{ article.likeCount }}</strong>
         </button>
         <button class="interaction-chip" :class="{ 'is-active': favorited }" :disabled="interactionLoading" @click="doFavorite">
-          <span class="interaction-chip__icon">★</span>
+          <el-icon class="interaction-chip__icon"><Star /></el-icon>
           <span>收藏</span>
           <strong>{{ article.favoriteCount || 0 }}</strong>
         </button>

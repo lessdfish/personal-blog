@@ -73,25 +73,40 @@ const registerAvailabilityLoading = reactive<Record<'username' | 'nickname' | 'e
   phone: false,
 })
 
+/**
+ * 切换登录页模式：在登录、注册、找回密码之间切换。
+ */
 function switchMode(mode: AuthMode) {
   activeMode.value = mode
 }
 
+/**
+ * 清空登录提示信息。
+ */
 function clearLoginMessages() {
   submitState.loginError = ''
   submitState.loginSuccess = ''
 }
 
+/**
+ * 清空注册提示信息和字段校验提示。
+ */
 function clearRegisterMessages() {
   submitState.registerError = ''
   submitState.registerSuccess = ''
 }
 
+/**
+ * 清空重置密码提示信息。
+ */
 function clearResetMessages() {
   submitState.resetError = ''
   submitState.resetSuccess = ''
 }
 
+/**
+ * 校验登录表单：检查用户名和密码是否填写。
+ */
 function validateLogin() {
   loginErrors.username = ''
   loginErrors.password = ''
@@ -110,6 +125,9 @@ function validateLogin() {
   return valid
 }
 
+/**
+ * 校验注册表单：检查必填项、格式和两次密码是否一致。
+ */
 function validateRegister() {
   registerErrors.username = ''
   registerErrors.password = ''
@@ -156,6 +174,9 @@ function validateRegister() {
   return valid
 }
 
+/**
+ * 延迟检查注册字段：用户停止输入后再请求后端，减少接口调用次数。
+ */
 function scheduleRegisterAvailabilityCheck(field: 'username' | 'nickname' | 'email' | 'phone', value: string) {
   const existingTimer = registerAvailabilityTimers.get(field)
   if (existingTimer) {
@@ -191,6 +212,9 @@ function scheduleRegisterAvailabilityCheck(field: 'username' | 'nickname' | 'ema
   registerAvailabilityTimers.set(field, timer)
 }
 
+/**
+ * 校验重置密码表单：检查账号、手机号和新密码是否符合要求。
+ */
 function validateReset() {
   resetErrors.username = ''
   resetErrors.phone = ''
@@ -225,6 +249,9 @@ function validateReset() {
   return valid
 }
 
+/**
+ * 处理登录提交：校验后调用登录流程并跳转页面。
+ */
 async function handleLogin() {
   if (!validateLogin()) {
     return
@@ -242,6 +269,9 @@ async function handleLogin() {
   }
 }
 
+/**
+ * 处理注册提交：校验后调用注册接口。
+ */
 async function handleRegister() {
   if (!validateRegister()) {
     return
@@ -263,6 +293,9 @@ async function handleRegister() {
   }
 }
 
+/**
+ * 处理重置密码提交：校验后调用重置接口。
+ */
 async function handleResetPassword() {
   if (!validateReset()) {
     return
@@ -421,7 +454,9 @@ watch(() => resetForm.confirmPassword, (value) => {
           返回主页
         </button>
       </div>
-      <div class="auth-card__badge">明</div>
+      <div class="auth-card__badge" aria-hidden="true">
+        <span class="auth-card__badge-mark"></span>
+      </div>
       <h1>明向饭庄</h1>
       <p class="auth-card__subtitle">内容社区账号中心</p>
 

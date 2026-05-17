@@ -20,6 +20,9 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class OpenApiConfig {
+    /**
+     * 配置 Swagger/OpenAPI 文档：告诉接口文档文章服务的名称和 JWT 登录方式。
+     */
     @Bean
     public OpenAPI articleOpenAPI(){
         return new OpenAPI()

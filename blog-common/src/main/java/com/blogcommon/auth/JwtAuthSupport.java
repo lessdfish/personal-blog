@@ -5,16 +5,21 @@ import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
-public final class JwtAuthSupport {
-    private JwtAuthSupport() {
+@Component
+public class JwtAuthSupport {
+    private final JwtUtil jwtUtil;
+
+    public JwtAuthSupport(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
     }
 
-    public static JwtUserInfo parseRequiredUser(HttpServletRequest request, HttpServletResponse response,
-                                                int unauthorizedCode, String unauthorizedMessage,
-                                                int invalidCode, String invalidMessage) throws IOException {
+    public JwtUserInfo parseRequiredUser(HttpServletRequest request, HttpServletResponse response,
+                                         int unauthorizedCode, String unauthorizedMessage,
+                                         int invalidCode, String invalidMessage) throws IOException {
         String token = extractToken(request);
         if (token == null) {
             writeJson(response, unauthorizedCode, unauthorizedMessage);
@@ -30,7 +35,7 @@ public final class JwtAuthSupport {
         }
     }
 
-    public static JwtUserInfo parseOptionalUser(HttpServletRequest request) {
+    public JwtUserInfo parseOptionalUser(HttpServletRequest request) {
         String token = extractToken(request);
         if (token == null) {
             return null;
@@ -44,12 +49,12 @@ public final class JwtAuthSupport {
         }
     }
 
-    public static void clear() {
+    public void clear() {
         RequestUserContext.clear();
     }
 
-    private static JwtUserInfo parseToken(String token) {
-        Claims claims = JwtUtil.parseToken(token);
+    private JwtUserInfo parseToken(String token) {
+        Claims claims = jwtUtil.parseToken(token);
         Long userId = parseUserId(claims.get("userId"));
         String role = claims.get("role", String.class);
         String username = claims.getSubject();
@@ -59,9 +64,10 @@ public final class JwtAuthSupport {
         return new JwtUserInfo(userId, role, username, token);
     }
 
-    private static void bind(JwtUserInfo userInfo) {
+    private void bind(JwtUserInfo userInfo) {
         RequestUserContext.setUserId(userInfo.userId());
         RequestUserContext.setRole(userInfo.role());
+        RequestUserContext.setUsername(userInfo.username());
     }
 
     public static String extractToken(HttpServletRequest request) {
@@ -81,7 +87,7 @@ public final class JwtAuthSupport {
         return null;
     }
 
-    private static Long parseUserId(Object userIdObj) {
+    private Long parseUserId(Object userIdObj) {
         if (userIdObj == null) {
             return null;
         }
@@ -94,7 +100,7 @@ public final class JwtAuthSupport {
         return Long.parseLong(userIdObj.toString());
     }
 
-    private static void writeJson(HttpServletResponse response, int code, String message) throws IOException {
+    private void writeJson(HttpServletResponse response, int code, String message) throws IOException {
         response.setContentType("application/json;charset=UTF-8");
         response.getWriter().write("{\"code\":" + code + ",\"message\":\"" + message + "\",\"data\":null}");
     }

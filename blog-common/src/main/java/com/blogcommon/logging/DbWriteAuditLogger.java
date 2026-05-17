@@ -26,13 +26,18 @@ public final class DbWriteAuditLogger {
         if (payload == null) {
             return "null";
         }
-        if (payload instanceof CharSequence || payload instanceof Number || payload instanceof Boolean || payload instanceof Enum<?> || payload instanceof Temporal) {
+        if (payload instanceof CharSequence
+                || payload instanceof Number
+                || payload instanceof Boolean
+                || payload instanceof Enum<?>
+                || payload instanceof Temporal) {
             return String.valueOf(payload);
         }
         if (payload instanceof Map<?, ?> map) {
             Map<String, String> rendered = new LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : map.entrySet()) {
-                rendered.put(String.valueOf(entry.getKey()), sanitizeValue(String.valueOf(entry.getKey()), entry.getValue()));
+                String key = String.valueOf(entry.getKey());
+                rendered.put(key, sanitizeValue(key, entry.getValue()));
             }
             return rendered.toString();
         }
@@ -85,7 +90,11 @@ public final class DbWriteAuditLogger {
         if (value == null) {
             return "null";
         }
-        if (value instanceof CharSequence || value instanceof Number || value instanceof Boolean || value instanceof Enum<?> || value instanceof Temporal) {
+        if (value instanceof CharSequence
+                || value instanceof Number
+                || value instanceof Boolean
+                || value instanceof Enum<?>
+                || value instanceof Temporal) {
             return String.valueOf(value);
         }
         return toSafeString(value);

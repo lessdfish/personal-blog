@@ -16,10 +16,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Feign 错误解码器
- * 用于处理远程服务调用失败的情况
- */
+    /**
+     * 创建 Feign 请求拦截器：调用其他服务时继续传递当前用户的登录凭证。
+     */
+
 @Configuration
 public class FeignConfig {
     @Bean
@@ -53,6 +53,9 @@ public class FeignConfig {
         };
     }
 
+    /**
+     * 创建 Feign 错误解析器：把远程服务返回的错误转成当前服务能处理的异常。
+     */
     @Bean
     public ErrorDecoder errorDecoder() {
         return new CustomErrorDecoder();
@@ -61,6 +64,9 @@ public class FeignConfig {
     public static class CustomErrorDecoder implements ErrorDecoder {
         private final ObjectMapper objectMapper = new ObjectMapper();
 
+        /**
+         * 解析 Feign 调用失败响应：根据 HTTP 状态码决定抛出什么异常。
+         */
         @Override
         public Exception decode(String methodKey, Response response) {
             try {

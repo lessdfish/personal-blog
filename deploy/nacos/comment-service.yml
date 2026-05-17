@@ -3,6 +3,9 @@ server:
 
 spring:
   cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
     loadbalancer:
       cache:
         enabled: true
@@ -34,3 +37,24 @@ logging:
   level:
     com.commentservice: info
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+      article-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+  retry:
+    instances:
+      user-service:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff-multiplier: 2
+      article-service:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff-multiplier: 2

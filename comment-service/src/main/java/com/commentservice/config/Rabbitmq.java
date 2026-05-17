@@ -6,10 +6,12 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 
 import javax.management.Query;
 
+    /**
+     * 配置 commentNotifyExchange：为当前服务准备运行时需要的组件或参数。
+     */
 /**
  * ClassName:Rabbitmq
  * Package:com.commentservice.config
@@ -20,18 +22,23 @@ import javax.management.Query;
  * @Version: v1.0
  *
  */
-@Configuration
 public class Rabbitmq {
     @Bean
     public DirectExchange commentNotifyExchange(){
         return new DirectExchange(MqConstants.COMMENT_NOTIFY_EXCHANGE,true,false);
     }
 
+    /**
+     * 配置 commentNotifyQueue：为当前服务准备运行时需要的组件或参数。
+     */
     @Bean
     public Queue commentNotifyQueue(){
         return new Queue(MqConstants.COMMENT_NOTIFY_QUEUE,true);
     }
 
+    /**
+     * 配置 commentNotifyBinding：为当前服务准备运行时需要的组件或参数。
+     */
     @Bean
     public Binding commentNotifyBinding(Queue commentNotifyQueue,DirectExchange commentNotifyExchange){
         return BindingBuilder.bind(commentNotifyQueue)

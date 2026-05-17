@@ -33,6 +33,7 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
             "/api/user/register",
             "/api/user/check",
             "/api/user/parse",
+            "/api/user/token/refresh",
             "/api/user/batch/simple",
             "/api/article/page",
             "/api/article/page/normal",
@@ -52,7 +53,18 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
     );
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final JwtUtil jwtUtil;
 
+    /**
+     * 构造 GatewayAuthFilter：注入这个类运行时需要的依赖。
+     */
+    public GatewayAuthFilter(JwtUtil jwtUtil) {
+        this.jwtUtil = jwtUtil;
+    }
+
+    /**
+     * 网关过滤器入口：检查当前请求，符合规则后再交给后续过滤器或下游服务。
+     */
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
@@ -66,7 +78,7 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         }
 
         try {
-            Claims claims = JwtUtil.parseToken(token);
+            Claims claims = jwtUtil.parseToken(token);
             ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .header("X-User-Id", String.valueOf(claims.get("userId")))
@@ -79,15 +91,24 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
         }
     }
 
+    /**
+     * 设置过滤器执行顺序：数字越小越早执行。
+     */
     @Override
     public int getOrder() {
         return -100;
     }
 
+    /**
+     * 判断请求路径是否在免登录白名单中。
+     */
     private boolean isWhiteListed(String path) {
         return WHITE_LIST.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
     }
 
+    /**
+     * 从请求头或 Cookie 中解析登录 token。
+     */
     private String resolveToken(ServerWebExchange exchange) {
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
@@ -102,6 +123,9 @@ public class GatewayAuthFilter implements GlobalFilter, Ordered {
                 .orElse(null);
     }
 
+    /**
+     * 向客户端返回错误响应：设置状态码和统一错误内容。
+     */
     private Mono<Void> writeError(ServerHttpResponse response, ResultCode resultCode) {
         response.setStatusCode(HttpStatus.OK);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);

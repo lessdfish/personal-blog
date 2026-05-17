@@ -8,6 +8,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,6 +25,9 @@ public class ArticleAsyncService {
     @Autowired
     private ArticleMapper articleMapper;
 
+    /**
+     * 异步预热热榜缓存：把热门文章的热度分数提前写入 Redis，后续查热榜更快。
+     */
     @Async("articleTaskExecutor")
     public void warmHotRankCache(int warmLimit) {
         if (stringRedisTemplate == null) {
@@ -34,7 +40,7 @@ public class ArticleAsyncService {
             }
             List<Article> hotArticles = articleMapper.selectHotList(warmLimit);
             for (Article article : hotArticles) {
-                double heat = calculateHeat(article);
+                double heat = ArticleHeatCalculator.calculate(article);
                 stringRedisTemplate.opsForZSet().add(ARTICLE_HEAT_RANK_KEY, article.getId().toString(), heat);
             }
         } catch (Exception e) {
@@ -42,27 +48,33 @@ public class ArticleAsyncService {
         }
     }
 
+    /**
+     * 异步清理热榜列表缓存：文章数据变化后，删除旧热榜，避免用户看到过期数据。
+     */
     @Async("articleTaskExecutor")
     public void evictHotListCaches() {
         if (stringRedisTemplate == null) {
             return;
         }
         try {
-            Set<String> hotKeys = stringRedisTemplate.keys(ARTICLE_HOT_CACHE_KEY + "*");
-            if (hotKeys != null && !hotKeys.isEmpty()) {
+            Set<String> hotKeys = new HashSet<>();
+            stringRedisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
+                try (var cursor = connection.scan(
+                        org.springframework.data.redis.core.ScanOptions.scanOptions()
+                                .match(ARTICLE_HOT_CACHE_KEY + "*")
+                                .count(100)
+                                .build())) {
+                    while (cursor.hasNext()) {
+                        hotKeys.add(new String(cursor.next()));
+                    }
+                }
+                return null;
+            });
+            if (!hotKeys.isEmpty()) {
                 stringRedisTemplate.delete(hotKeys);
             }
         } catch (Exception e) {
             log.warn("异步删除热榜列表缓存失败", e);
         }
-    }
-
-    private double calculateHeat(Article article) {
-        return article.getViewCount() * 1D
-                + article.getCommentCount() * 5D
-                + article.getLikeCount() * 4D
-                + article.getFavoriteCount() * 3D
-                + (article.getIsTop() == null ? 0 : article.getIsTop() * 6D)
-                + (article.getIsEssence() == null ? 0 : article.getIsEssence() * 10D);
     }
 }

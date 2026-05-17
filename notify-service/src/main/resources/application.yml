@@ -7,7 +7,7 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8948}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/blog_cloud?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USERNAME:root}
@@ -39,10 +39,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,prometheus}
   endpoint:
     health:
-      show-details: always
+      show-details: ${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:never}
   metrics:
     tags:
       application: ${spring.application.name}

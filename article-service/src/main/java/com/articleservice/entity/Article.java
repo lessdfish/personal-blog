@@ -24,6 +24,10 @@ public class Article implements Serializable {
     private Integer isTop;
     private Integer isEssence;
     private Integer allowComment;
+    private Double hotScore;
+    private Double hotAdjustScore;
+    private Integer hotDecayEnabled;
+    private LocalDateTime lastHotRefreshTime;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

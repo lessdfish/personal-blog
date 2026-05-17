@@ -11,6 +11,9 @@
   --accent-soft: rgba(221, 107, 85, 0.16);
   --shadow: 0 24px 72px rgba(0, 0, 0, 0.22);
   --radius: 26px;
+  --wallpaper-image: url('/forum-fantasy-girl.jpg');
+  --wallpaper-position: center top;
+  --wallpaper-overlay: linear-gradient(180deg, rgba(6, 8, 14, 0.28), rgba(8, 10, 16, 0.52));
 }
 
 * {
@@ -28,10 +31,8 @@ body {
   min-width: 320px;
   color: var(--ink);
   background:
-    linear-gradient(180deg, rgba(6, 8, 14, 0.2), rgba(8, 10, 16, 0.44)),
-    radial-gradient(circle at 72% 14%, rgba(221, 107, 85, 0.12), transparent 26%),
-    radial-gradient(circle at 15% 28%, rgba(129, 137, 255, 0.08), transparent 24%),
-    url('/forum-fantasy-girl.jpg') center top / cover fixed no-repeat;
+    var(--wallpaper-overlay),
+    var(--wallpaper-image) var(--wallpaper-position) / cover fixed no-repeat;
   font-family: "Source Han Sans SC", "PingFang SC", sans-serif;
 }
 
@@ -46,7 +47,7 @@ h3 {
   margin: 0;
   font-family: "Noto Serif SC", serif;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 p {
@@ -92,15 +93,15 @@ p {
 .app-header__brand-mark {
   width: 42px;
   height: 42px;
-  border-radius: 14px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
-  color: #fff6ef;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-family: "Noto Serif SC", serif;
-  font-size: 22px;
+  background: linear-gradient(135deg, rgba(255, 139, 114, 0.94), rgba(103, 168, 141, 0.9));
+  color: #fffaf6;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 28px rgba(103, 168, 141, 0.24);
+  font-size: 23px;
 }
 
 .app-header__brand {
@@ -125,10 +126,17 @@ p {
 }
 
 .app-header__nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 10px;
   border-radius: 999px;
   color: var(--muted);
   transition: all 0.2s ease;
+}
+
+.app-header__nav .el-icon {
+  font-size: 15px;
 }
 
 .app-header__nav a.router-link-active {
@@ -141,6 +149,25 @@ p {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff3ec;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.icon-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .app-header__identity {
@@ -373,10 +400,14 @@ p {
 .rank-heat {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   color: #ff8f75;
   font-size: 13px;
   white-space: nowrap;
+}
+
+.rank-heat .el-icon {
+  font-size: 15px;
 }
 
 .tiny-link {
@@ -660,7 +691,6 @@ p {
   overflow: hidden;
   background:
     linear-gradient(180deg, rgba(8, 9, 13, 0.16), rgba(8, 9, 13, 0.38)),
-    radial-gradient(circle at 75% 18%, rgba(221, 107, 85, 0.14), transparent 24%),
     url('/forum-fantasy-girl.jpg') center top / cover no-repeat;
 }
 
@@ -854,11 +884,37 @@ p {
   border-radius: 18px;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, #ff8b72, #d65862);
+  background: linear-gradient(135deg, #ff8b72, #67a88d);
   color: white;
-  font-family: "Noto Serif SC", serif;
-  font-size: 28px;
-  box-shadow: 0 14px 32px rgba(214, 88, 98, 0.26);
+  box-shadow: 0 14px 32px rgba(103, 168, 141, 0.24);
+}
+
+.auth-card__badge-mark {
+  width: 30px;
+  height: 18px;
+  position: relative;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-top: 0;
+  border-radius: 0 0 18px 18px;
+}
+
+.auth-card__badge-mark::before,
+.auth-card__badge-mark::after {
+  content: "";
+  position: absolute;
+  top: -13px;
+  width: 2px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.auth-card__badge-mark::before {
+  left: 8px;
+}
+
+.auth-card__badge-mark::after {
+  right: 8px;
 }
 
 .auth-card h1 {
@@ -1003,6 +1059,12 @@ p {
   color: inherit;
   cursor: pointer;
   padding: 0;
+}
+
+.ghost-btn--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .divider {

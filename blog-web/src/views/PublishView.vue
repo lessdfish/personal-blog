@@ -11,14 +11,21 @@ const form = reactive({
   tags: '',
 })
 
+/**
+ * 提交表单：校验页面输入后调用对应接口。
+ */
 async function submit() {
-  await publishArticle(form)
-  ElMessage.success('帖子发布成功')
-  form.title = ''
-  form.summary = ''
-  form.content = ''
-  form.boardId = undefined
-  form.tags = ''
+  try {
+    await publishArticle(form)
+    ElMessage.success('帖子发布成功')
+    form.title = ''
+    form.summary = ''
+    form.content = ''
+    form.boardId = undefined
+    form.tags = ''
+  } catch {
+    ElMessage.error('发布失败，请稍后重试')
+  }
 }
 </script>
 

@@ -1,5 +1,7 @@
 package com.commentservice.service;
 
+import com.blogcommon.enums.ResultCode;
+import com.blogcommon.exception.BusinessException;
 import com.blogcommon.message.MqConstants;
 import com.blogcommon.result.Result;
 import com.commentservice.client.ArticleClient;
@@ -23,9 +25,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -142,6 +146,53 @@ class CommentServiceTest {
 
         verify(commentMapper).deleteById(77L);
         verify(articleClient).updateCommentCount(10L, -1);
+    }
+
+    @Test
+    void deleteShouldAllowOwnerDeleteOwnComment() {
+        Comment comment = new Comment();
+        comment.setId(78L);
+        comment.setArticleId(11L);
+        comment.setUserId(5L);
+        when(commentMapper.selectById(78L)).thenReturn(comment);
+        when(commentMapper.deleteByIdAndUserId(78L, 5L)).thenReturn(1);
+
+        commentService.delete(5L, "USER", 78L);
+
+        verify(commentMapper).deleteByIdAndUserId(78L, 5L);
+        verify(articleClient).updateCommentCount(11L, -1);
+    }
+
+    @Test
+    void deleteShouldRejectNonOwner() {
+        Comment comment = new Comment();
+        comment.setId(79L);
+        comment.setArticleId(12L);
+        comment.setUserId(9L);
+        when(commentMapper.selectById(79L)).thenReturn(comment);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> commentService.delete(5L, "USER", 79L));
+
+        assertEquals(ResultCode.FORBIDDEN.getCode(), exception.getCode());
+        verify(commentMapper, never()).deleteById(anyLong());
+        verify(commentMapper, never()).deleteByIdAndUserId(anyLong(), anyLong());
+    }
+
+    @Test
+    void deleteShouldRejectModeratorForOtherUsersComment() {
+        Comment comment = new Comment();
+        comment.setId(80L);
+        comment.setArticleId(13L);
+        comment.setUserId(9L);
+        when(commentMapper.selectById(80L)).thenReturn(comment);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> commentService.delete(5L, "MODERATOR", 80L));
+
+        assertEquals(ResultCode.FORBIDDEN.getCode(), exception.getCode());
+        verify(commentMapper, never()).deleteById(anyLong());
+        verify(commentMapper, never()).deleteByIdAndUserId(anyLong(), anyLong());
     }
 
     @Test

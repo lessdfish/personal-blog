@@ -26,6 +26,9 @@ public class CommentConverter {
         return comment;
     }
 
+    /**
+     * 转换返回对象：把数据库实体转换成前端需要的 VO。
+     */
     public static CommentVO toVO(Comment comment) {
         CommentVO vo = new CommentVO();
         vo.setId(comment.getId());

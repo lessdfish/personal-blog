@@ -17,5 +17,6 @@ import lombok.Data;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class LoginVO {
     private String token;
+    private String refreshToken;
     private LoginUserVO user;
 }

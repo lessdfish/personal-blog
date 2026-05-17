@@ -17,28 +17,33 @@ import java.util.List;
  */
 @Mapper
 public interface UserMapper {
-    @Select("select * from tb_user where id=#{id}")
+    String USER_COLUMNS = """
+            id, username, password, nickname, avatar, email, phone, status,
+            create_time, update_time, role_id
+            """;
+
+    @Select("select " + USER_COLUMNS + " from tb_user where id=#{id}")
     User selectById(Long id);
 
-    @Select("select * from tb_user where username = #{username}")
+    @Select("select " + USER_COLUMNS + " from tb_user where username = #{username}")
     User selectByUsername(String username);
 
-    @Select("select * from tb_user where nickname = #{nickname} limit 1")
+    @Select("select " + USER_COLUMNS + " from tb_user where nickname = #{nickname} limit 1")
     User selectByNickname(String nickname);
 
-    @Select("select * from tb_user where email = #{email} limit 1")
+    @Select("select " + USER_COLUMNS + " from tb_user where email = #{email} limit 1")
     User selectByEmail(String email);
 
-    @Select("select * from tb_user where phone = #{phone} limit 1")
+    @Select("select " + USER_COLUMNS + " from tb_user where phone = #{phone} limit 1")
     User selectByPhone(String phone);
 
-    @Select("select * from tb_user where nickname = #{nickname} and id <> #{id} limit 1")
+    @Select("select " + USER_COLUMNS + " from tb_user where nickname = #{nickname} and id <> #{id} limit 1")
     User selectByNicknameExcludeId(@Param("nickname") String nickname, @Param("id") Long id);
 
-    @Select("select * from tb_user where email = #{email} and id <> #{id} limit 1")
+    @Select("select " + USER_COLUMNS + " from tb_user where email = #{email} and id <> #{id} limit 1")
     User selectByEmailExcludeId(@Param("email") String email, @Param("id") Long id);
 
-    @Select("select * from tb_user where phone = #{phone} and id <> #{id} limit 1")
+    @Select("select " + USER_COLUMNS + " from tb_user where phone = #{phone} and id <> #{id} limit 1")
     User selectByPhoneExcludeId(@Param("phone") String phone, @Param("id") Long id);
 
     @Insert("""
@@ -66,7 +71,9 @@ public interface UserMapper {
     int updatePassword(@Param("id") Long id, @Param("password") String password);
 
     @Select("""
-        select * from tb_user
+        select
+        """ + USER_COLUMNS + """
+        from tb_user
         order by id desc
         """)
     List<User> selectUserList();
@@ -90,7 +97,9 @@ public interface UserMapper {
 
     @Select("""
         <script>
-        select * from tb_user
+        select
+        """ + USER_COLUMNS + """
+        from tb_user
         where id in
         <foreach collection="ids" item="id" open="(" separator="," close=")">
             #{id}

@@ -19,6 +19,9 @@ public class RolePermissionCacheService {
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
 
+    /**
+     * 获取 permissionCodesByRoleId：返回当前对象里保存的这个值。
+     */
     public List<String> getPermissionCodesByRoleId(Long roleId) {
         if (roleId == null) {
             return List.of();
@@ -31,6 +34,9 @@ public class RolePermissionCacheService {
         return writeCache(key, roleMapper.selectPermissionCodesByRoleId(roleId));
     }
 
+    /**
+     * 获取 permissionCodesByRoleCode：返回当前对象里保存的这个值。
+     */
     public List<String> getPermissionCodesByRoleCode(String roleCode) {
         if (!StringUtils.hasText(roleCode)) {
             return List.of();
@@ -43,6 +49,9 @@ public class RolePermissionCacheService {
         return writeCache(key, roleMapper.selectPermissionCodesByRoleCode(roleCode));
     }
 
+    /**
+     * 读取缓存数据：把缓存里的字符串还原成业务需要的对象。
+     */
     private List<String> readCache(String key) {
         if (stringRedisTemplate == null) {
             return List.of();
@@ -57,6 +66,9 @@ public class RolePermissionCacheService {
                 .toList();
     }
 
+    /**
+     * 写入缓存数据：把业务数据保存到缓存中，减少后续查询压力。
+     */
     private List<String> writeCache(String key, List<String> values) {
         List<String> safeValues = values == null ? List.of() : values.stream()
                 .filter(StringUtils::hasText)

@@ -6,13 +6,13 @@ spring:
     name: user-service
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 5MB
+      max-file-size: ${AVATAR_MAX_FILE_SIZE:5MB}
+      max-request-size: ${AVATAR_MAX_FILE_SIZE:5MB}
 
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8948}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         register-enabled: true
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/blog_cloud?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
@@ -46,10 +46,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,prometheus}
   endpoint:
     health:
-      show-details: always
+      show-details: ${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:never}
   metrics:
     tags:
       application: ${spring.application.name}
@@ -59,6 +59,9 @@ logging:
     com.userservice: info
 
 auth:
+  cookie:
+    secure: ${AUTH_COOKIE_SECURE:false}
+    same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
   token-session:
     fail-open-on-redis-error: true
     local-cache-seconds: 300
@@ -66,3 +69,6 @@ auth:
 app:
   avatar:
     upload-dir: ${AVATAR_UPLOAD_DIR:${user.dir}/run-logs/avatar-uploads}
+    max-size-bytes: ${AVATAR_MAX_SIZE_BYTES:5242880}
+    allowed-extensions: jpg,jpeg,png,webp,gif
+    allowed-content-types: image/jpeg,image/png,image/webp,image/gif

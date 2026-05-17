@@ -3,6 +3,7 @@ package com.blogcommon.auth;
 public final class RequestUserContext {
     private static final ThreadLocal<Long> USER_ID_HOLDER = new ThreadLocal<>();
     private static final ThreadLocal<String> ROLE_HOLDER = new ThreadLocal<>();
+    private static final ThreadLocal<String> USERNAME_HOLDER = new ThreadLocal<>();
 
     private RequestUserContext() {
     }
@@ -23,8 +24,17 @@ public final class RequestUserContext {
         return ROLE_HOLDER.get();
     }
 
+    public static void setUsername(String username) {
+        USERNAME_HOLDER.set(username);
+    }
+
+    public static String getUsername() {
+        return USERNAME_HOLDER.get();
+    }
+
     public static void clear() {
         USER_ID_HOLDER.remove();
         ROLE_HOLDER.remove();
+        USERNAME_HOLDER.remove();
     }
 }

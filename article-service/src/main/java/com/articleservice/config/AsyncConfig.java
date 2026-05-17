@@ -10,6 +10,9 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Configuration
 public class AsyncConfig {
 
+    /**
+     * 创建文章模块的异步线程池：让预热缓存、清理缓存这类后台任务不用阻塞接口请求。
+     */
     @Bean("articleTaskExecutor")
     public Executor articleTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

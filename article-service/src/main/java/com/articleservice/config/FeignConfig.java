@@ -11,6 +11,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Configuration
 public class FeignConfig {
+    /**
+     * 创建 Feign 请求拦截器：调用其他服务时，把当前请求里的登录凭证继续传过去。
+     */
     @Bean
     public RequestInterceptor tokenRelayRequestInterceptor() {
         return template -> {

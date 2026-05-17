@@ -7,13 +7,21 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8948}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+    openfeign:
+      circuitbreaker:
+        enabled: true
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://127.0.0.1:9200}
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/blog_cloud?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:change-me}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
+    elasticsearch:
+      repositories:
+        enabled: false
     redis:
       host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
@@ -44,10 +52,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,prometheus}
   endpoint:
     health:
-      show-details: always
+      show-details: ${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:never}
   metrics:
     tags:
       application: ${spring.application.name}
@@ -56,7 +64,26 @@ logging:
   level:
     com.articleservice: info
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+  retry:
+    instances:
+      user-service:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff-multiplier: 2
+
 auth:
   token-session:
     fail-open-on-redis-error: true
     local-cache-seconds: 300
+
+article:
+  heat:
+    refresh-fixed-delay-ms: ${ARTICLE_HEAT_REFRESH_FIXED_DELAY_MS:1800000}
+    refresh-initial-delay-ms: ${ARTICLE_HEAT_REFRESH_INITIAL_DELAY_MS:300000}

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:/Users/lyp/.claude/skills/ui-ux-pro-max\")",
+      "Bash(mkdir -p \"C:/Users/lyp/.claude/skills/interaction-design\")",
+      "Bash(mkdir -p \"C:/Users/lyp/.claude/skills/frontend-design\")"
+    ]
+  }
+}

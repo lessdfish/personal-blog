@@ -1,0 +1,90 @@
+groups:
+  - name: blog-cloud-availability
+    rules:
+      - alert: BlogCloudServiceDown
+        expr: up{job=~"blog-gateway|user-service|article-service|comment-service|notify-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Blog Cloud service is down"
+          description: "{{ $labels.job }} has been unreachable for more than 2 minutes."
+
+      - alert: BlogCloudHttp5xxHigh
+        expr: |
+          sum by (job) (rate(http_server_requests_seconds_count{job=~"blog-gateway|user-service|article-service|comment-service|notify-service",status=~"5.."}[5m]))
+          /
+          clamp_min(sum by (job) (rate(http_server_requests_seconds_count{job=~"blog-gateway|user-service|article-service|comment-service|notify-service"}[5m])), 1)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx rate is high"
+          description: "{{ $labels.job }} has more than 5% 5xx responses over 5 minutes."
+
+      - alert: BlogCloudP95LatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (job, le) (rate(http_server_requests_seconds_bucket{job=~"blog-gateway|user-service|article-service|comment-service|notify-service"}[5m]))
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP p95 latency is high"
+          description: "{{ $labels.job }} p95 latency is above 2 seconds for 5 minutes."
+
+  - name: blog-cloud-jvm
+    rules:
+      - alert: BlogCloudJvmHeapHigh
+        expr: |
+          sum by (job) (jvm_memory_used_bytes{area="heap",job=~"blog-gateway|user-service|article-service|comment-service|notify-service"})
+          /
+          clamp_min(sum by (job) (jvm_memory_max_bytes{area="heap",job=~"blog-gateway|user-service|article-service|comment-service|notify-service"}), 1)
+          > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap usage is high"
+          description: "{{ $labels.job }} heap usage has stayed above 85% for 10 minutes."
+
+  - name: blog-cloud-infrastructure
+    rules:
+      - alert: BlogCloudRabbitMqQueueMessagesHigh
+        expr: rabbitmq_queue_messages_ready{queue=~"blog\\..*"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ queue backlog is high"
+          description: "{{ $labels.queue }} has more than 1000 ready messages for 10 minutes."
+
+      - alert: BlogCloudRabbitMqDlqMessagesPresent
+        expr: rabbitmq_queue_messages_ready{queue=~".*\\.dlq"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ DLQ has messages"
+          description: "{{ $labels.queue }} has dead-letter messages that need operator review."
+
+      - alert: BlogCloudElasticsearchHealthBad
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Elasticsearch cluster health is red"
+          description: "Elasticsearch reports red cluster health for more than 5 minutes."
+
+      - alert: BlogCloudMysqlExporterDown
+        expr: absent(mysql_up) or mysql_up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL exporter is unavailable"
+          description: "MySQL exporter metrics are absent or down. Enable exporter before production alerting."

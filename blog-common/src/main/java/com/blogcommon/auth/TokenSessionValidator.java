@@ -10,11 +10,14 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class TokenSessionValidator {
     private static final Logger log = LoggerFactory.getLogger(TokenSessionValidator.class);
+    private static final int CLEANUP_THRESHOLD = 1000;
     private final Map<String, Long> localTokenCache = new ConcurrentHashMap<>();
+    private final AtomicLong putCounter = new AtomicLong(0);
 
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
@@ -48,6 +51,14 @@ public class TokenSessionValidator {
 
     private void rememberLocalToken(Long userId, String token) {
         localTokenCache.put(buildLocalKey(userId, token), System.currentTimeMillis() + localCacheSeconds * 1000);
+        if (putCounter.incrementAndGet() % CLEANUP_THRESHOLD == 0) {
+            evictExpiredTokens();
+        }
+    }
+
+    private void evictExpiredTokens() {
+        long now = System.currentTimeMillis();
+        localTokenCache.entrySet().removeIf(entry -> entry.getValue() < now);
     }
 
     private boolean isRememberedLocally(Long userId, String token) {

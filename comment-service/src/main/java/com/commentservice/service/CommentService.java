@@ -18,6 +18,7 @@ import com.commentservice.vo.ArticleSimpleVO;
 import com.commentservice.vo.CommentVO;
 import com.commentservice.vo.PageResult;
 import com.commentservice.vo.UserSimpleVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class CommentService {
     @Value("${comment.rate-limit.enabled:true}")
     private boolean rateLimitEnabled;
@@ -54,6 +56,9 @@ public class CommentService {
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
 
+    /**
+     * 创建数据：接收请求参数，校验后保存一条新记录。
+     */
     public Long create(Long userId, CommentCreateDTO dto) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
@@ -61,7 +66,7 @@ public class CommentService {
         checkRateLimit(userId);
 
         ArticleSimpleVO article = getArticleOrThrow(dto.getArticleId());
-        if (article.getAllowComment() != null && article.getAllowComment() == 0) {
+        if (Integer.valueOf(0).equals(article.getAllowComment())) {
             throw new BusinessException(ResultCode.ARTICLE_COMMENT_CLOSED);
         }
 
@@ -110,6 +115,9 @@ public class CommentService {
         return comment.getId();
     }
 
+    /**
+     * 分页查询文章评论：按文章 id 返回评论树列表。
+     */
     public PageResult<CommentVO> pageByArticle(CommentPageQueryDTO dto) {
         Long articleId = dto.getArticleId();
         int pageNum = dto.getPageNum() == null || dto.getPageNum() < 1 ? 1 : dto.getPageNum();
@@ -117,7 +125,7 @@ public class CommentService {
         int offset = (pageNum - 1) * pageSize;
 
         Long total = commentMapper.countRootCommentsByArticleId(articleId);
-        if (total == null || total == 0) {
+        if (total == null || Long.valueOf(0L).equals(total)) {
             PageResult<CommentVO> empty = new PageResult<>();
             empty.setTotal(0L);
             empty.setList(Collections.emptyList());
@@ -160,6 +168,9 @@ public class CommentService {
         return result;
     }
 
+    /**
+     * 查询文章评论列表：按文章 id 获取评论及其回复。
+     */
     public List<CommentVO> listByArticleId(Long articleId) {
         List<Comment> comments = commentMapper.selectByArticleId(articleId);
         if (comments == null || comments.isEmpty()) {
@@ -175,6 +186,9 @@ public class CommentService {
         return comments.stream().map(comment -> toBaseVO(comment, userMap)).toList();
     }
 
+    /**
+     * 删除数据：校验权限后删除或标记删除指定记录。
+     */
     public void delete(Long userId, String role, Long id) {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
@@ -183,14 +197,20 @@ public class CommentService {
         if (comment == null) {
             throw new BusinessException(ResultCode.COMMENT_NOT_FOUND);
         }
-        boolean isManager = "ADMIN".equals(role) || "MODERATOR".equals(role);
-        int rows = isManager ? commentMapper.deleteById(id) : commentMapper.deleteByIdAndUserId(id, userId);
+        boolean isAdmin = "ADMIN".equals(role);
+        if (!isAdmin && !Objects.equals(comment.getUserId(), userId)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
+        int rows = isAdmin ? commentMapper.deleteById(id) : commentMapper.deleteByIdAndUserId(id, userId);
         if (rows <= 0) {
             throw new BusinessException(ResultCode.COMMENT_DELETE_FAILED);
         }
         syncArticleCommentCount(comment.getArticleId(), -1);
     }
 
+    /**
+     * 查询文章并要求存在：文章不存在或不能评论时抛出业务异常。
+     */
     private ArticleSimpleVO getArticleOrThrow(Long articleId) {
         if (articleId == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
@@ -201,19 +221,26 @@ public class CommentService {
         } catch (Exception e) {
             throw new BusinessException(ResultCode.ARTICLE_NOT_FOUND.getCode(), "无法获取帖子信息: " + e.getMessage());
         }
-        if (result == null || result.getCode() == null || result.getCode() != 200 || result.getData() == null) {
+        if (result == null || !Integer.valueOf(200).equals(result.getCode()) || result.getData() == null) {
             throw new BusinessException(ResultCode.ARTICLE_NOT_FOUND);
         }
         return result.getData();
     }
 
+    /**
+     * 同步文章评论数：评论新增或删除后通知文章服务更新计数。
+     */
     private void syncArticleCommentCount(Long articleId, Integer delta) {
         try {
             articleClient.updateCommentCount(articleId, delta);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("同步文章评论数失败, articleId={}, delta={}", articleId, delta, e);
         }
     }
 
+    /**
+     * 批量查询用户信息并整理成 Map：方便给评论补充作者昵称和头像。
+     */
     private Map<Long, UserSimpleVO> getUserMap(Collection<Long> userIds) {
         List<Long> ids = userIds.stream().filter(Objects::nonNull).distinct().toList();
         if (ids.isEmpty()) {
@@ -226,6 +253,9 @@ public class CommentService {
         return result.getData().stream().collect(Collectors.toMap(UserSimpleVO::getId, user -> user));
     }
 
+    /**
+     * 构建一级评论返回对象：把一级评论和它的子回复组装起来。
+     */
     private CommentVO buildRootVO(Comment root, Map<Long, List<Comment>> childrenMap, Map<Long, UserSimpleVO> userMap) {
         CommentVO vo = toBaseVO(root, userMap);
         List<Comment> childComments = childrenMap.get(root.getId());
@@ -241,6 +271,9 @@ public class CommentService {
         return vo;
     }
 
+    /**
+     * 构建评论基础返回对象：把评论实体转换成前端需要的字段。
+     */
     private CommentVO toBaseVO(Comment comment, Map<Long, UserSimpleVO> userMap) {
         CommentVO vo = new CommentVO();
         vo.setId(comment.getId());
@@ -263,25 +296,27 @@ public class CommentService {
         return vo;
     }
 
+    /**
+     * 检查评论频率限制：防止同一用户短时间内频繁发表评论。
+     */
     private void checkRateLimit(Long userId) {
         if (!rateLimitEnabled || stringRedisTemplate == null || userId == null) {
             return;
         }
         String key = RedisKeyConstants.LIMIT_COMMENT_KEY + userId;
-        String countStr = stringRedisTemplate.opsForValue().get(key);
-        int count = countStr != null ? Integer.parseInt(countStr) : 0;
-        if (count >= rateLimitThreshold) {
+        Long count = stringRedisTemplate.opsForValue().increment(key);
+        if (Long.valueOf(1L).equals(count)) {
+            stringRedisTemplate.expire(key, rateLimitWindowSeconds, TimeUnit.SECONDS);
+        }
+        if (count != null && count > rateLimitThreshold) {
             throw new BusinessException(ResultCode.COMMENT_RATE_LIMIT.getCode(),
                     "评论过于频繁，请" + rateLimitWindowSeconds + "秒后再试");
         }
-        if (count == 0) {
-            stringRedisTemplate.opsForValue().set(
-                    key, "1", rateLimitWindowSeconds, TimeUnit.SECONDS);
-        } else {
-            stringRedisTemplate.opsForValue().increment(key);
-        }
     }
 
+    /**
+     * 查询剩余可评论次数：用于告诉用户当前频率限制还剩多少。
+     */
     public int getRemainingComments(Long userId) {
         if (stringRedisTemplate == null || userId == null) {
             return rateLimitThreshold;

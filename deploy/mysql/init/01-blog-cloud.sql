@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS blog_cloud CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE blog_cloud;
 
@@ -70,10 +72,15 @@ CREATE TABLE IF NOT EXISTS tb_article (
     is_top TINYINT NOT NULL DEFAULT 0,
     is_essence TINYINT NOT NULL DEFAULT 0,
     allow_comment TINYINT NOT NULL DEFAULT 1,
+    hot_score DOUBLE NOT NULL DEFAULT 0,
+    hot_adjust_score DOUBLE NOT NULL DEFAULT 0,
+    hot_decay_enabled TINYINT NOT NULL DEFAULT 1,
+    last_hot_refresh_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_article_status_top_board_id (status, is_top, board_id, id),
-    KEY idx_article_author_status_id (author_id, status, id)
+    KEY idx_article_author_status_id (author_id, status, id),
+    KEY idx_article_status_hot_score (status, hot_score, id)
 );
 
 CREATE TABLE IF NOT EXISTS tb_article_like (

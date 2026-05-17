@@ -1,13 +1,18 @@
 package com.userservice.service;
 
+import com.blogcommon.auth.RequestUserContext;
+import com.blogcommon.enums.ResultCode;
+import com.blogcommon.exception.BusinessException;
 import com.userservice.dto.LoginDTO;
 import com.userservice.dto.RegisterDTO;
 import com.userservice.dto.UpdatePasswordDTO;
+import com.userservice.dto.UpdateUserStatusDTO;
 import com.userservice.entity.Role;
 import com.userservice.entity.User;
 import com.userservice.mapper.RoleMapper;
 import com.userservice.mapper.UserMapper;
 import org.junit.jupiter.api.Assertions;
+import com.blogcommon.util.JwtUtil;
 import com.userservice.vo.LoginVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,16 +22,19 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
@@ -39,16 +47,19 @@ class UserServiceTest {
     private final StringRedisTemplate stringRedisTemplate = mock(StringRedisTemplate.class);
     private final UserActivityService userActivityService = mock(UserActivityService.class);
     private final RolePermissionCacheService rolePermissionCacheService = mock(RolePermissionCacheService.class);
+    private final JwtUtil jwtUtil = new JwtUtil("blog-cloud-secret-key-blog-cloud-secret-key-blog-cloud-secret-key", 86400);
     private final UserService userService = new UserService();
 
     @BeforeEach
     void setUp() {
+        RequestUserContext.clear();
         ReflectionTestUtils.setField(userService, "userMapper", userMapper);
         ReflectionTestUtils.setField(userService, "passwordEncoder", passwordEncoder);
         ReflectionTestUtils.setField(userService, "roleMapper", roleMapper);
         ReflectionTestUtils.setField(userService, "stringRedisTemplate", stringRedisTemplate);
         ReflectionTestUtils.setField(userService, "userActivityService", userActivityService);
         ReflectionTestUtils.setField(userService, "rolePermissionCacheService", rolePermissionCacheService);
+        ReflectionTestUtils.setField(userService, "jwtUtil", jwtUtil);
         when(rolePermissionCacheService.getPermissionCodesByRoleId(anyLong())).thenReturn(List.of());
         when(rolePermissionCacheService.getPermissionCodesByRoleCode("USER")).thenReturn(List.of());
     }
@@ -83,16 +94,26 @@ class UserServiceTest {
 
         assertNotNull(loginVO);
         assertNotNull(loginVO.getToken());
+        assertNotNull(loginVO.getRefreshToken());
         assertEquals("tomuser", loginVO.getUser().getUsername());
         assertEquals("Tom", loginVO.getUser().getNickname());
-        verify(valueOperations).set(eq("blog:user:token:1"), eq(loginVO.getToken()), eq(604800L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).set(eq("blog:user:token:1"), eq(loginVO.getToken()), eq(86400L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).set(eq("blog:user:refresh:token:1"), eq(loginVO.getRefreshToken()), eq(604800L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).set(eq("blog:refresh:lookup:" + loginVO.getRefreshToken()), eq("1"), eq(604800L), eq(TimeUnit.SECONDS));
         verify(userActivityService).recordActivity(1L);
     }
 
     @Test
     void logoutShouldDeleteTokenAndOnlineState() {
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("blog:user:refresh:token:3")).thenReturn("refresh-3");
+
         userService.logout(3L);
 
+        verify(stringRedisTemplate).delete("blog:refresh:lookup:refresh-3");
+        verify(stringRedisTemplate).delete("blog:user:refresh:token:3");
         verify(stringRedisTemplate).delete("blog:user:token:3");
         verify(stringRedisTemplate).delete("blog:user:online:3");
     }
@@ -134,7 +155,39 @@ class UserServiceTest {
     void refreshTokenShouldExpireCacheAndRecordActivity() {
         userService.refreshToken(5L);
 
-        verify(stringRedisTemplate).expire("blog:user:token:5", 604800L, TimeUnit.SECONDS);
+        verify(stringRedisTemplate).expire("blog:user:token:5", 86400L, TimeUnit.SECONDS);
+        verify(userActivityService).recordActivity(5L);
+    }
+
+    @Test
+    void refreshAccessTokenShouldRotateRefreshToken() {
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("blog:refresh:lookup:old-refresh")).thenReturn("5");
+        when(valueOperations.get("blog:user:refresh:token:5")).thenReturn("old-refresh");
+
+        User user = new User();
+        user.setId(5L);
+        user.setUsername("refresh-user");
+        user.setNickname("Refresh");
+        user.setStatus(1);
+        user.setRoleId(2L);
+        Role role = new Role();
+        role.setId(2L);
+        role.setRoleCode("USER");
+        when(userMapper.selectById(5L)).thenReturn(user);
+        when(roleMapper.selectById(2L)).thenReturn(role);
+
+        LoginVO loginVO = userService.refreshAccessToken("old-refresh");
+
+        assertNotNull(loginVO.getToken());
+        assertNotNull(loginVO.getRefreshToken());
+        assertNotEquals("old-refresh", loginVO.getRefreshToken());
+        verify(stringRedisTemplate).delete("blog:refresh:lookup:old-refresh");
+        verify(valueOperations).set(eq("blog:user:token:5"), eq(loginVO.getToken()), eq(86400L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).set(eq("blog:user:refresh:token:5"), eq(loginVO.getRefreshToken()), eq(604800L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).set(eq("blog:refresh:lookup:" + loginVO.getRefreshToken()), eq("5"), eq(604800L), eq(TimeUnit.SECONDS));
         verify(userActivityService).recordActivity(5L);
     }
 
@@ -155,13 +208,44 @@ class UserServiceTest {
     }
 
     @Test
-    void getActiveUserSummaryShouldReadRedisStructures() {
+    void updateUserStatusShouldRejectNonAdminAtServiceLayer() {
+        RequestUserContext.setRole("USER");
+        UpdateUserStatusDTO dto = new UpdateUserStatusDTO();
+        dto.setUserId(8L);
+        dto.setStatus(0);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> userService.updateUserStatus(dto));
+
+        assertEquals(ResultCode.FORBIDDEN.getCode(), exception.getCode());
+        verify(userMapper, never()).updateUserStatus(anyLong(), any());
+    }
+
+    @Test
+    void getActiveUserSummaryShouldReadRedisStructures() throws Exception {
         @SuppressWarnings("unchecked")
         SetOperations<String, String> setOperations = mock(SetOperations.class);
         when(stringRedisTemplate.opsForSet()).thenReturn(setOperations);
         when(setOperations.size(org.mockito.ArgumentMatchers.startsWith("blog:user:active:day:"))).thenReturn(3L);
         when(setOperations.size(org.mockito.ArgumentMatchers.startsWith("blog:user:active:week:"))).thenReturn(9L);
-        when(stringRedisTemplate.keys("blog:user:online:*")).thenReturn(Set.of("blog:user:online:1", "blog:user:online:2"));
+
+        Set<String> onlineKeys = Set.of("blog:user:online:1", "blog:user:online:2");
+        Iterator<byte[]> scanIterator = onlineKeys.stream()
+                .map(String::getBytes)
+                .iterator();
+        @SuppressWarnings("unchecked")
+        org.springframework.data.redis.core.Cursor<byte[]> cursor = mock(org.springframework.data.redis.core.Cursor.class);
+        when(cursor.hasNext()).thenAnswer(inv -> scanIterator.hasNext());
+        when(cursor.next()).thenAnswer(inv -> scanIterator.next());
+
+        org.springframework.data.redis.connection.RedisConnection connection =
+                mock(org.springframework.data.redis.connection.RedisConnection.class);
+        when(connection.scan(any(org.springframework.data.redis.core.ScanOptions.class))).thenReturn(cursor);
+
+        doAnswer(inv -> {
+            org.springframework.data.redis.core.RedisCallback<?> callback = inv.getArgument(0);
+            return callback.doInRedis(connection);
+        }).when(stringRedisTemplate).execute(any(org.springframework.data.redis.core.RedisCallback.class));
 
         var summary = userService.getActiveUserSummary();
 

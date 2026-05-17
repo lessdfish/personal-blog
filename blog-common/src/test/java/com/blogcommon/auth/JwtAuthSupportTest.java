@@ -19,22 +19,25 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtAuthSupportTest {
+    private static final String SECRET = "blog-cloud-secret-key-blog-cloud-secret-key-blog-cloud-secret-key";
     private static final SecretKey KEY =
-            Keys.hmacShaKeyFor("blog-cloud-secret-key-blog-cloud-secret-key".getBytes(StandardCharsets.UTF_8));
+            Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+    private final com.blogcommon.util.JwtUtil jwtUtil = new com.blogcommon.util.JwtUtil(SECRET, 86400);
+    private final JwtAuthSupport jwtAuthSupport = new JwtAuthSupport(jwtUtil);
 
     @AfterEach
     void tearDown() {
-        JwtAuthSupport.clear();
+        jwtAuthSupport.clear();
     }
 
     @Test
     void parseRequiredUserShouldBindContextWhenTokenValid() throws Exception {
-        String token = com.blogcommon.util.JwtUtil.createToken(7L, "tester", "USER");
+        String token = jwtUtil.createToken(7L, "tester", "USER");
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -49,6 +52,7 @@ class JwtAuthSupportTest {
         assertEquals("tester", userInfo.username());
         assertEquals(7L, RequestUserContext.getUserId());
         assertEquals("USER", RequestUserContext.getRole());
+        assertEquals("tester", RequestUserContext.getUsername());
     }
 
     @Test
@@ -56,7 +60,7 @@ class JwtAuthSupportTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -77,7 +81,7 @@ class JwtAuthSupportTest {
         request.addHeader("Authorization", "Bearer broken-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -95,10 +99,11 @@ class JwtAuthSupportTest {
     void parseOptionalUserShouldReturnNullWhenHeaderMissing() {
         MockHttpServletRequest request = new MockHttpServletRequest();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseOptionalUser(request);
+        JwtUserInfo userInfo = jwtAuthSupport.parseOptionalUser(request);
 
         assertNull(userInfo);
         assertNull(RequestUserContext.getUserId());
+        assertNull(RequestUserContext.getUsername());
     }
 
     @Test
@@ -106,7 +111,7 @@ class JwtAuthSupportTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer broken-token");
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseOptionalUser(request);
+        JwtUserInfo userInfo = jwtAuthSupport.parseOptionalUser(request);
 
         assertNull(userInfo);
         assertNull(RequestUserContext.getUserId());
@@ -114,25 +119,26 @@ class JwtAuthSupportTest {
 
     @Test
     void parseOptionalUserShouldBindContextWhenTokenValid() {
-        String token = com.blogcommon.util.JwtUtil.createToken(8L, "optionalUser", "USER");
+        String token = jwtUtil.createToken(8L, "optionalUser", "USER");
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer " + token);
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseOptionalUser(request);
+        JwtUserInfo userInfo = jwtAuthSupport.parseOptionalUser(request);
 
         assertNotNull(userInfo);
         assertEquals(8L, userInfo.userId());
         assertEquals("USER", RequestUserContext.getRole());
+        assertEquals("optionalUser", RequestUserContext.getUsername());
     }
 
     @Test
     void parseRequiredUserShouldSupportHttpOnlyCookieToken() throws Exception {
-        String token = com.blogcommon.util.JwtUtil.createToken(18L, "cookie-user", "USER");
+        String token = jwtUtil.createToken(18L, "cookie-user", "USER");
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setCookies(new Cookie(AuthConstants.AUTH_COOKIE_NAME, token));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -152,7 +158,7 @@ class JwtAuthSupportTest {
         request.addHeader("Authorization", "Bearer " + buildTokenWithUserId(12, "int-user", "ADMIN"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -172,7 +178,7 @@ class JwtAuthSupportTest {
         request.addHeader("Authorization", "Bearer " + buildTokenWithUserId("15", "string-user", "USER"));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -200,7 +206,7 @@ class JwtAuthSupportTest {
         request.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        JwtUserInfo userInfo = JwtAuthSupport.parseRequiredUser(
+        JwtUserInfo userInfo = jwtAuthSupport.parseRequiredUser(
                 request,
                 response,
                 401,
@@ -217,11 +223,13 @@ class JwtAuthSupportTest {
     void clearShouldRemoveThreadLocalContext() {
         RequestUserContext.setUserId(99L);
         RequestUserContext.setRole("ADMIN");
+        RequestUserContext.setUsername("admin");
 
-        JwtAuthSupport.clear();
+        jwtAuthSupport.clear();
 
         assertNull(RequestUserContext.getUserId());
         assertNull(RequestUserContext.getRole());
+        assertNull(RequestUserContext.getUsername());
     }
 
     private String buildTokenWithUserId(Object userId, String username, String role) {

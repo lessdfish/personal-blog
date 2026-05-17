@@ -61,6 +61,10 @@ public interface NotifyMapper {
     @Delete("delete from tb_notify where id = #{id} and user_id = #{userId}")
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
-    @Update("update tb_notify set is_read = 1 where id in (${ids}) and user_id = #{userId}")
-    int batchMarkAsRead(@Param("ids") String ids, @Param("userId") Long userId);
+    @Update({"<script>",
+        "update tb_notify set is_read = 1 where id in",
+        "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>",
+        "and user_id = #{userId}",
+        "</script>"})
+    int batchMarkAsRead(@Param("ids") List<Long> ids, @Param("userId") Long userId);
 }

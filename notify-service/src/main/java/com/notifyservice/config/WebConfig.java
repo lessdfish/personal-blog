@@ -20,6 +20,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private JwtInterceptor jwtInterceptor;
 
+    /**
+     * 注册 Web 拦截器：配置哪些接口需要登录校验，哪些公开接口可以放行。
+     */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(jwtInterceptor)

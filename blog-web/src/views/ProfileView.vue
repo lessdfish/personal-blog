@@ -33,6 +33,9 @@ const errors = reactive({
 const displayAvatar = computed(() => form.avatar || authStore.user?.avatar || forumVisual)
 const uploadRef = ref()
 
+/**
+ * 隐藏手机号中间几位：保护个人信息展示。
+ */
 function maskPhone(phone?: string) {
   if (!phone) {
     return '--'
@@ -53,6 +56,9 @@ const profileRows = computed(() => [
   { key: 'loginTime', label: '登录时间', value: authStore.user?.sessionInfo?.loginTime || '--', editable: false },
 ])
 
+/**
+ * 同步表单数据：把当前用户信息填入编辑表单。
+ */
 function syncForm() {
   form.username = authStore.user?.username || ''
   form.nickname = authStore.user?.nickname || ''
@@ -61,6 +67,9 @@ function syncForm() {
   form.phone = authStore.user?.phone || ''
 }
 
+/**
+ * 校验资料表单：检查用户修改的资料是否符合要求。
+ */
 function validateProfile() {
   errors.nickname = ''
   errors.avatar = ''
@@ -88,6 +97,9 @@ function validateProfile() {
   return valid
 }
 
+/**
+ * 提交资料修改：校验后保存昵称、邮箱、手机号等信息。
+ */
 async function submitProfile() {
   if (!validateProfile()) {
     return
@@ -123,6 +135,9 @@ async function submitProfile() {
   }
 }
 
+/**
+ * 切换字段编辑状态：控制资料页某个字段是否可编辑。
+ */
 function toggleEdit(field: keyof typeof editableFields) {
   const nextState = !editableFields[field]
   editableFields[field] = nextState
@@ -136,14 +151,23 @@ function toggleEdit(field: keyof typeof editableFields) {
   }
 }
 
+/**
+ * 判断字段是否支持编辑：用于限制只能编辑指定资料项。
+ */
 function isEditableField(key: string): key is keyof typeof editableFields {
   return key === 'nickname' || key === 'email' || key === 'phone' || key === 'avatar'
 }
 
+/**
+ * 判断字段是否正在编辑：控制输入框和按钮显示。
+ */
 function isFieldEditing(key: string) {
   return isEditableField(key) ? editableFields[key] : false
 }
 
+/**
+ * 处理头像文件变化：校验并上传用户选择的新头像。
+ */
 async function handleAvatarChange(rawFile: File) {
   avatarUploading.value = true
   try {
@@ -161,6 +185,9 @@ async function handleAvatarChange(rawFile: File) {
   }
 }
 
+/**
+ * 处理头像选择：从上传组件中取出原始文件继续处理。
+ */
 function handleAvatarSelect(uploadFile: UploadFile) {
   const rawFile = uploadFile.raw
   if (!rawFile) {
@@ -181,6 +208,9 @@ function handleAvatarSelect(uploadFile: UploadFile) {
   void handleAvatarChange(rawFile)
 }
 
+/**
+ * 生成圆形头像图片：把用户选择的图片裁剪成圆形后上传。
+ */
 async function createCircularAvatar(file: File) {
   const image = await readImage(file)
   const cropSize = Math.min(image.width, image.height)
@@ -213,6 +243,9 @@ async function createCircularAvatar(file: File) {
   return new File([blob], `${file.name.replace(/\.\w+$/, '') || 'avatar'}.jpg`, { type: 'image/jpeg' })
 }
 
+/**
+ * 读取图片文件：把 File 加载成 Image 对象方便画布处理。
+ */
 async function readImage(file: File) {
   const objectUrl = URL.createObjectURL(file)
   try {

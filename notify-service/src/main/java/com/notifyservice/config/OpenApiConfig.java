@@ -20,6 +20,9 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
+    /**
+     * 配置 articleOpenAPI：为当前服务准备运行时需要的组件或参数。
+     */
     @Bean
     public OpenAPI articleOpenAPI(){
         return new OpenAPI()

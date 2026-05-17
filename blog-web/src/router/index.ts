@@ -1,12 +1,34 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import LoginView from '../views/LoginView.vue'
-import HomeView from '../views/HomeView.vue'
-import ArticleDetailView from '../views/ArticleDetailView.vue'
-import NotifyView from '../views/NotifyView.vue'
-import PublishView from '../views/PublishView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import AppLayout from '../views/AppLayout.vue'
+
+/**
+ * 懒加载页面组件 AppLayout：路由进入时再加载对应视图。
+ */
+/**
+ * 懒加载页面组件 ProfileView：路由进入时再加载对应视图。
+ */
+/**
+ * 懒加载页面组件 PublishView：路由进入时再加载对应视图。
+ */
+/**
+ * 懒加载页面组件 NotifyView：路由进入时再加载对应视图。
+ */
+/**
+ * 懒加载页面组件 ArticleDetailView：路由进入时再加载对应视图。
+ */
+/**
+ * 懒加载页面组件 HomeView：路由进入时再加载对应视图。
+ */
+/**
+ * 懒加载页面组件 LoginView：路由进入时再加载对应视图。
+ */
+const LoginView = () => import('../views/LoginView.vue')
+const HomeView = () => import('../views/HomeView.vue')
+const ArticleDetailView = () => import('../views/ArticleDetailView.vue')
+const NotifyView = () => import('../views/NotifyView.vue')
+const PublishView = () => import('../views/PublishView.vue')
+const ProfileView = () => import('../views/ProfileView.vue')
+const AppLayout = () => import('../views/AppLayout.vue')
 
 const router = createRouter({
   history: createWebHistory(),

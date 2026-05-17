@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { TrendCharts } from '@element-plus/icons-vue'
 import { getArticlePage, getHotArticles } from '../api/article'
 import type { ArticleItem } from '../types/api'
 
@@ -9,20 +10,41 @@ const pageNum = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const loading = ref(false)
+let requestSeq = 0
 
+/**
+ * 加载当前页数据：根据页面状态请求列表接口并更新渲染数据。
+ */
 async function loadPage() {
+  const seq = ++requestSeq
   loading.value = true
   try {
-    const result = await getArticlePage({ pageNum: pageNum.value, pageSize: pageSize.value })
-    articleList.value = result.list
-    total.value = result.total
-    hotList.value = await getHotArticles(8)
+    const [pageResult, hotResult] = await Promise.allSettled([
+      getArticlePage({ pageNum: pageNum.value, pageSize: pageSize.value }),
+      getHotArticles(8),
+    ])
+    if (seq !== requestSeq) {
+      return
+    }
+    if (pageResult.status === 'fulfilled') {
+      articleList.value = pageResult.value.list
+      total.value = pageResult.value.total
+    }
+    if (hotResult.status === 'fulfilled') {
+      hotList.value = hotResult.value
+    }
   } finally {
-    loading.value = false
+    if (seq === requestSeq) {
+      loading.value = false
+    }
   }
 }
 
 onMounted(loadPage)
+
+function formatHeatScore(value?: number) {
+  return (value ?? 0).toFixed(2)
+}
 </script>
 
 <template>
@@ -82,7 +104,7 @@ onMounted(loadPage)
           <li v-for="(item, index) in hotList" :key="item.id">
             <span class="rank-no">0{{ index + 1 }}</span>
             <router-link :to="`/article/${item.id}`" class="rank-link">{{ item.title }}</router-link>
-            <span class="rank-heat">✦ {{ item.heatScore || 0 }}</span>
+            <span class="rank-heat"><el-icon><TrendCharts /></el-icon>{{ formatHeatScore(item.heatScore) }}</span>
           </li>
         </ol>
       </aside>

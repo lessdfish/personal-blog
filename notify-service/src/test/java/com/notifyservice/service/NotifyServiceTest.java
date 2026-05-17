@@ -98,10 +98,11 @@ class NotifyServiceTest {
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         when(notifyMapper.selectById(9L)).thenReturn(notify);
         when(notifyMapper.markAsRead(9L, 6L)).thenReturn(1);
+        when(notifyMapper.countUnreadByUserId(6L)).thenReturn(0L);
 
         notifyService.markAsRead(6L, 9L);
 
-        verify(valueOperations).decrement("blog:notify:unread:6", 1);
+        verify(valueOperations).set("blog:notify:unread:6", "0", 300L, TimeUnit.SECONDS);
     }
 
     @Test

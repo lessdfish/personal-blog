@@ -20,6 +20,9 @@ public class UserActivityService {
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
 
+    /**
+     * 记录用户活跃度：用户访问接口后更新活跃用户统计。
+     */
     public void recordActivity(Long userId) {
         if (userId == null || stringRedisTemplate == null) {
             return;

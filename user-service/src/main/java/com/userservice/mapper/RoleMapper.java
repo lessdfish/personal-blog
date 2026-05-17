@@ -18,6 +18,12 @@ public interface RoleMapper {
     @Select("select * from tb_role where role_code = #{roleCode} limit 1")
     Role selectByCode(@Param("roleCode") String roleCode);
 
+    @Select({"<script>",
+            "select * from tb_role where id in",
+            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>#{id}</foreach>",
+            "</script>"})
+    List<Role> selectByIds(@Param("ids") List<Long> ids);
+
     @Select("""
             select p.permission_code
             from tb_role r

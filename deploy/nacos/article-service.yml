@@ -1,6 +1,18 @@
 server:
   port: 8082
 
+spring:
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://elasticsearch:9200}
+  data:
+    elasticsearch:
+      repositories:
+        enabled: false
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: true
+
 mybatis:
   configuration:
     map-underscore-to-camel-case: true
@@ -23,3 +35,21 @@ logging:
   level:
     com.articleservice: info
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+  retry:
+    instances:
+      user-service:
+        max-attempts: 3
+        wait-duration: 500ms
+        exponential-backoff-multiplier: 2
+
+article:
+  heat:
+    refresh-fixed-delay-ms: 1800000
+    refresh-initial-delay-ms: 300000

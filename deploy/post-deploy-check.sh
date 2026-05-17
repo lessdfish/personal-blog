@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-BASE_URL="${1:-http://127.0.0.1:8080}"
+BASE_URL="${1:-http://127.0.0.1:18080}"
 
 echo "[check] gateway health"
 curl -fsS "$BASE_URL/actuator/health" >/dev/null
@@ -19,6 +19,6 @@ if [ "$HTTP_CODE" != "200" ]; then
   echo "[check] unexpected http code: $HTTP_CODE"
   exit 1
 fi
-grep -q '"code":2001\|"code":2002\|"code":401' /tmp/blog_notify_check.out
+grep -q '"code":2004\|"code":2005\|"code":401' /tmp/blog_notify_check.out
 
 echo "[check] post-deploy checks passed"
