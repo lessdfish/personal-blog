@@ -79,7 +79,7 @@ pipeline {
             sh '''
               set +x
 
-              ssh ${VM_USER}@${VM_HOST} "mkdir -p ${DEPLOY_DIR}"
+              ssh ${VM_USER}@${VM_HOST} "mkdir -p ${DEPLOY_DIR} && rm -f ${DEPLOY_DIR}/.env.production.tmp"
 
               scp docker-compose.yml docker-compose.images.yml ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/
               rsync -az --delete deploy/ ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/deploy/
@@ -89,6 +89,8 @@ pipeline {
 
               ssh ${VM_USER}@${VM_HOST} "
                 set -e
+                unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+                export NO_PROXY=127.0.0.1,localhost,::1
                 cd ${DEPLOY_DIR} &&
                 mv .env.production.tmp .env.production &&
                 chmod 600 .env.production &&
@@ -98,7 +100,13 @@ pipeline {
                 export IMAGE_TAG='${IMAGE_TAG}' &&
                 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml pull &&
                 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d mysql redis rabbitmq nacos elasticsearch &&
-                sleep 30 &&
+                for i in \$(seq 1 60); do
+                  if curl --noproxy '*' -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness >/dev/null; then
+                    break
+                  fi
+                  echo \"waiting for nacos readiness... \$i\"
+                  sleep 5
+                done &&
                 bash deploy/import-nacos-configs.sh &&
                 bash deploy/scripts/apply-mysql-migrations.sh &&
                 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d --no-build --remove-orphans &&

@@ -20,7 +20,7 @@ CONFIG_FILES=(
 
 echo "[nacos] login ${NACOS_URL}"
 LOGIN_RESPONSE="$(
-  curl -fsS -X POST "${NACOS_URL}/nacos/v1/auth/users/login" \
+  curl --noproxy '*' -fsS -X POST "${NACOS_URL}/nacos/v1/auth/users/login" \
     -d "username=${NACOS_USERNAME}" \
     -d "password=${NACOS_PASSWORD}"
 )"
@@ -40,7 +40,7 @@ for file in "${CONFIG_FILES[@]}"; do
   fi
 
   echo "[nacos] publish ${file} group=${NACOS_GROUP}"
-  curl -fsS -X POST "${NACOS_URL}/nacos/v1/cs/configs" \
+  curl --noproxy '*' -fsS -X POST "${NACOS_URL}/nacos/v1/cs/configs" \
     --data-urlencode "dataId=${file}" \
     --data-urlencode "group=${NACOS_GROUP}" \
     --data-urlencode "type=YAML" \
