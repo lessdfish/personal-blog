@@ -1,0 +1,19 @@
+services:
+  user-service:
+    build: null
+    image: ghcr.io/${GHCR_OWNER}/blog-cloud-user-service:${IMAGE_TAG}
+  article-service:
+    build: null
+    image: ghcr.io/${GHCR_OWNER}/blog-cloud-article-service:${IMAGE_TAG}
+  comment-service:
+    build: null
+    image: ghcr.io/${GHCR_OWNER}/blog-cloud-comment-service:${IMAGE_TAG}
+  notify-service:
+    build: null
+    image: ghcr.io/${GHCR_OWNER}/blog-cloud-notify-service:${IMAGE_TAG}
+  blog-gateway:
+    build: null
+    image: ghcr.io/${GHCR_OWNER}/blog-cloud-gateway:${IMAGE_TAG}
+  blog-web:
+    build: null
+    image: ghcr.io/${GHCR_OWNER}/blog-cloud-web:${IMAGE_TAG}
