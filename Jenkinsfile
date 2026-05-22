@@ -78,16 +78,16 @@ pipeline {
             file(credentialsId: 'blog-cloud-env-file', variable: 'BLOG_CLOUD_ENV'),
             usernamePassword(credentialsId: 'github-ghcr-token', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN')
           ]) {
-            sh '''
+            sh """
               set +x
 
               ssh ${VM_USER}@${VM_HOST} "mkdir -p ${DEPLOY_DIR} && rm -f ${DEPLOY_DIR}/.env.production.tmp"
 
               scp docker-compose.yml docker-compose.images.yml ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/
               rsync -az --delete deploy/ ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/deploy/
-              scp "$BLOG_CLOUD_ENV" ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/.env.production.tmp
+              scp "\$BLOG_CLOUD_ENV" ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/.env.production.tmp
 
-              echo "$GHCR_TOKEN" | ssh ${VM_USER}@${VM_HOST} "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
+              echo "\$GHCR_TOKEN" | ssh ${VM_USER}@${VM_HOST} "docker login ghcr.io -u '\$GHCR_USER' --password-stdin"
 
               ssh ${VM_USER}@${VM_HOST} "GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' DEPLOY_DIR='${DEPLOY_DIR}' bash -s" <<'REMOTE_SCRIPT'
                 set -e
@@ -101,11 +101,11 @@ pipeline {
                 export GHCR_OWNER IMAGE_TAG
                 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml pull
                 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d mysql redis rabbitmq nacos elasticsearch
-                for i in $(seq 1 60); do
+                for i in \$(seq 1 60); do
                   if curl --noproxy '*' -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness >/dev/null; then
                     break
                   fi
-                  echo "waiting for nacos readiness... $i"
+                  echo "waiting for nacos readiness... \$i"
                   sleep 5
                 done
                 bash deploy/import-nacos-configs.sh
@@ -114,7 +114,7 @@ pipeline {
                 sleep 30
                 bash deploy/post-deploy-check.sh http://127.0.0.1:18080
 REMOTE_SCRIPT
-            '''
+            """
           }
         }
       }
