@@ -14,7 +14,8 @@ COPY article-service/pom.xml article-service/pom.xml
 COPY comment-service/pom.xml comment-service/pom.xml
 COPY notify-service/pom.xml notify-service/pom.xml
 
-RUN mvn -ntp -pl ${SERVICE_MODULE} -am dependency:go-offline -DskipTests
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -ntp -pl ${SERVICE_MODULE} -am dependency:go-offline -DskipTests
 
 COPY blog-common blog-common
 COPY blog-gateway blog-gateway
@@ -23,7 +24,8 @@ COPY article-service article-service
 COPY comment-service comment-service
 COPY notify-service notify-service
 
-RUN mvn -ntp -pl ${SERVICE_MODULE} -am clean package -DskipTests -Dmaven.test.skip=true -Djacoco.skip=true
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -ntp -pl ${SERVICE_MODULE} -am clean package -DskipTests -Dmaven.test.skip=true -Djacoco.skip=true
 
 FROM eclipse-temurin:17-jre-jammy
 ARG SERVICE_MODULE
