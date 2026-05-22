@@ -380,6 +380,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CORS_ALLOWED_ORIGIN_PATTERNS: ${CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:18081,http://127.0.0.1:18081}
     ports:
       - "${GATEWAY_PUBLIC_PORT:-18080}:18080"
 
@@ -396,6 +397,15 @@ services:
         condition: service_started
     ports:
       - "${WEB_PUBLIC_PORT:-80}:80"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      blog-web:
+        condition: service_started
 
   https-proxy:
     image: nginx:1.27-alpine
