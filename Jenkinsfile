@@ -89,32 +89,31 @@ pipeline {
 
               echo "$GHCR_TOKEN" | ssh ${VM_USER}@${VM_HOST} "docker login ghcr.io -u '$GHCR_USER' --password-stdin"
 
-              ssh ${VM_USER}@${VM_HOST} "
+              ssh ${VM_USER}@${VM_HOST} "GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' DEPLOY_DIR='${DEPLOY_DIR}' bash -s" <<'REMOTE_SCRIPT'
                 set -e
                 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
                 export NO_PROXY=127.0.0.1,localhost,::1
-                cd ${DEPLOY_DIR} &&
-                mv .env.production.tmp .env.production &&
-                chmod 600 .env.production &&
-                find deploy -name '*.sh' -exec sed -i 's/\\r$//' {} \\; &&
-                chmod +x deploy/scripts/apply-mysql-migrations.sh deploy/post-deploy-check.sh deploy/import-nacos-configs.sh &&
-                export GHCR_OWNER='${GHCR_OWNER}' &&
-                export IMAGE_TAG='${IMAGE_TAG}' &&
-                docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml pull &&
-                docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d mysql redis rabbitmq nacos elasticsearch &&
-                for i in \$(seq 1 60); do
+                cd "$DEPLOY_DIR"
+                mv .env.production.tmp .env.production
+                chmod 600 .env.production
+                find deploy -name '*.sh' -exec sed -i 's/\r$//' {} \;
+                chmod +x deploy/scripts/apply-mysql-migrations.sh deploy/post-deploy-check.sh deploy/import-nacos-configs.sh
+                export GHCR_OWNER IMAGE_TAG
+                docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml pull
+                docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d mysql redis rabbitmq nacos elasticsearch
+                for i in $(seq 1 60); do
                   if curl --noproxy '*' -fsS http://127.0.0.1:8848/nacos/v1/console/health/readiness >/dev/null; then
                     break
                   fi
-                  echo \"waiting for nacos readiness... \$i\"
+                  echo "waiting for nacos readiness... $i"
                   sleep 5
-                done &&
-                bash deploy/import-nacos-configs.sh &&
-                bash deploy/scripts/apply-mysql-migrations.sh &&
-                docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d --no-build --remove-orphans &&
-                sleep 30 &&
+                done
+                bash deploy/import-nacos-configs.sh
+                bash deploy/scripts/apply-mysql-migrations.sh
+                docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml up -d --no-build --remove-orphans
+                sleep 30
                 bash deploy/post-deploy-check.sh http://127.0.0.1:18080
-              "
+REMOTE_SCRIPT
             '''
           }
         }
