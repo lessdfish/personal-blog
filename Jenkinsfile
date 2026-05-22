@@ -93,10 +93,10 @@ pipeline {
                 set -e
                 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
                 export NO_PROXY=127.0.0.1,localhost,::1
-                cd "$DEPLOY_DIR"
+                cd "\$DEPLOY_DIR"
                 mv .env.production.tmp .env.production
                 chmod 600 .env.production
-                find deploy -name '*.sh' -exec sed -i 's/\r$//' {} \;
+                find deploy -name '*.sh' -exec sed -i 's/\\r\$//' {} \\;
                 chmod +x deploy/scripts/apply-mysql-migrations.sh deploy/post-deploy-check.sh deploy/import-nacos-configs.sh
                 export GHCR_OWNER IMAGE_TAG
                 docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.images.yml pull
