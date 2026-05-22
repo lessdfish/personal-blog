@@ -2,7 +2,8 @@
 .github
 .idea
 .m2
-**/target
+**/target/*
+!**/target/*.jar
 **/run-logs
 blog-web/node_modules
 blog-web/dist
