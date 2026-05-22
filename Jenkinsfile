@@ -7,6 +7,7 @@ pipeline {
     VM_HOST = '192.168.147.129'
     VM_USER = 'deploy'
     DEPLOY_DIR = '/opt/blog-cloud'
+    DOCKER_BUILDKIT = '1'
   }
 
   stages {
@@ -32,9 +33,10 @@ pipeline {
 
           docker run --rm \
             -v "$WORKSPACE/blog-web:/workspace" \
+            -v "$HOME/.npm:/root/.npm" \
             -w /workspace \
             node:22-alpine \
-            sh -c "npm ci && npm run build"
+            sh -c "npm ci --cache /root/.npm --prefer-offline && npm run build"
         '''
       }
     }
@@ -42,11 +44,11 @@ pipeline {
     stage('Build Images') {
       steps {
         sh '''
-          docker build -f docker/backend-service.Dockerfile --build-arg SERVICE_MODULE=user-service --build-arg SERVICE_PORT=8081 -t $REGISTRY/blog-cloud-user-service:$IMAGE_TAG .
-          docker build -f docker/backend-service.Dockerfile --build-arg SERVICE_MODULE=article-service --build-arg SERVICE_PORT=8082 -t $REGISTRY/blog-cloud-article-service:$IMAGE_TAG .
-          docker build -f docker/backend-service.Dockerfile --build-arg SERVICE_MODULE=comment-service --build-arg SERVICE_PORT=8083 -t $REGISTRY/blog-cloud-comment-service:$IMAGE_TAG .
-          docker build -f docker/backend-service.Dockerfile --build-arg SERVICE_MODULE=notify-service --build-arg SERVICE_PORT=8084 -t $REGISTRY/blog-cloud-notify-service:$IMAGE_TAG .
-          docker build -f docker/backend-service.Dockerfile --build-arg SERVICE_MODULE=blog-gateway --build-arg SERVICE_PORT=18080 -t $REGISTRY/blog-cloud-gateway:$IMAGE_TAG .
+          docker build -f docker/backend-runtime.Dockerfile --build-arg SERVICE_MODULE=user-service --build-arg SERVICE_PORT=8081 -t $REGISTRY/blog-cloud-user-service:$IMAGE_TAG .
+          docker build -f docker/backend-runtime.Dockerfile --build-arg SERVICE_MODULE=article-service --build-arg SERVICE_PORT=8082 -t $REGISTRY/blog-cloud-article-service:$IMAGE_TAG .
+          docker build -f docker/backend-runtime.Dockerfile --build-arg SERVICE_MODULE=comment-service --build-arg SERVICE_PORT=8083 -t $REGISTRY/blog-cloud-comment-service:$IMAGE_TAG .
+          docker build -f docker/backend-runtime.Dockerfile --build-arg SERVICE_MODULE=notify-service --build-arg SERVICE_PORT=8084 -t $REGISTRY/blog-cloud-notify-service:$IMAGE_TAG .
+          docker build -f docker/backend-runtime.Dockerfile --build-arg SERVICE_MODULE=blog-gateway --build-arg SERVICE_PORT=18080 -t $REGISTRY/blog-cloud-gateway:$IMAGE_TAG .
           docker build -f blog-web/Dockerfile -t $REGISTRY/blog-cloud-web:$IMAGE_TAG .
         '''
       }

@@ -4,7 +4,8 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY blog-web/package.json blog-web/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --cache /root/.npm --prefer-offline
 
 COPY blog-web ./
 RUN npm run build
