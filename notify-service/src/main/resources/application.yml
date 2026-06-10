@@ -8,6 +8,14 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+    sentinel:
+      enabled: ${SENTINEL_ENABLED:true}
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8719}
+      eager: true
+      filter:
+        enabled: true
   datasource:
     url: ${MYSQL_URL:jdbc:mysql://127.0.0.1:3306/blog_cloud?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai}
     username: ${MYSQL_USERNAME:root}

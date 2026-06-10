@@ -16,6 +16,7 @@
         <module>article-service</module>
         <module>comment-service</module>
         <module>notify-service</module>
+        <module>canal-service</module>
     </modules>
 
     <properties>
@@ -26,6 +27,8 @@
         <mybatis.spring.boot.version>3.0.3</mybatis.spring.boot.version>
         <mysql.version>8.0.33</mysql.version>
         <jjwt.version>0.12.5</jjwt.version>
+        <caffeine.version>3.1.8</caffeine.version>
+        <canal.starter.version>1.2.1-RELEASE</canal.starter.version>
     </properties>
 
     <dependencyManagement>

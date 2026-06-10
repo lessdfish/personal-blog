@@ -42,6 +42,45 @@ services:
           cpus: "0.10"
           memory: 128M
 
+  redis-master:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+
+  redis-replica-1:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+
+  redis-replica-2:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+
   rabbitmq:
     cpus: 0.50
     mem_limit: 512m
@@ -69,8 +108,21 @@ services:
           cpus: "0.75"
           memory: 768M
         reservations:
+        cpus: "0.25"
+        memory: 512M
+
+  sentinel-dashboard:
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
           cpus: "0.25"
-          memory: 512M
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
 
   elasticsearch:
     cpus: 1.00
@@ -136,6 +188,9 @@ services:
     <<: *java-service-limits
 
   notify-service:
+    <<: *java-service-limits
+
+  canal-service:
     <<: *java-service-limits
 
   blog-gateway:

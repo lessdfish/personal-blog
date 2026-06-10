@@ -9,6 +9,7 @@ import com.blogcommon.message.MqConstants;
 import com.blogcommon.result.Result;
 import com.commentservice.client.ArticleClient;
 import com.commentservice.client.UserClient;
+import com.commentservice.config.CommentRateLimitProperties;
 import com.commentservice.converter.CommentConverter;
 import com.commentservice.dto.CommentCreateDTO;
 import com.commentservice.dto.CommentPageQueryDTO;
@@ -21,7 +22,6 @@ import com.commentservice.vo.UserSimpleVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -38,13 +38,6 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 public class CommentService {
-    @Value("${comment.rate-limit.enabled:true}")
-    private boolean rateLimitEnabled;
-    @Value("${comment.rate-limit.window-seconds:60}")
-    private long rateLimitWindowSeconds;
-    @Value("${comment.rate-limit.threshold:10}")
-    private int rateLimitThreshold;
-
     @Autowired
     private CommentMapper commentMapper;
     @Autowired
@@ -55,6 +48,8 @@ public class CommentService {
     private UserClient userClient;
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired(required = false)
+    private CommentRateLimitProperties rateLimitProperties;
 
     /**
      * 创建数据：接收请求参数，校验后保存一条新记录。
@@ -300,17 +295,17 @@ public class CommentService {
      * 检查评论频率限制：防止同一用户短时间内频繁发表评论。
      */
     private void checkRateLimit(Long userId) {
-        if (!rateLimitEnabled || stringRedisTemplate == null || userId == null) {
+        if (!isRateLimitEnabled() || stringRedisTemplate == null || userId == null) {
             return;
         }
         String key = RedisKeyConstants.LIMIT_COMMENT_KEY + userId;
         Long count = stringRedisTemplate.opsForValue().increment(key);
         if (Long.valueOf(1L).equals(count)) {
-            stringRedisTemplate.expire(key, rateLimitWindowSeconds, TimeUnit.SECONDS);
+            stringRedisTemplate.expire(key, rateLimitWindowSeconds(), TimeUnit.SECONDS);
         }
-        if (count != null && count > rateLimitThreshold) {
+        if (count != null && count > rateLimitThreshold()) {
             throw new BusinessException(ResultCode.COMMENT_RATE_LIMIT.getCode(),
-                    "评论过于频繁，请" + rateLimitWindowSeconds + "秒后再试");
+                    "评论过于频繁，请" + rateLimitWindowSeconds() + "秒后再试");
         }
     }
 
@@ -319,11 +314,32 @@ public class CommentService {
      */
     public int getRemainingComments(Long userId) {
         if (stringRedisTemplate == null || userId == null) {
-            return rateLimitThreshold;
+            return rateLimitThreshold();
         }
         String key = RedisKeyConstants.LIMIT_COMMENT_KEY + userId;
         String countStr = stringRedisTemplate.opsForValue().get(key);
         int count = countStr != null ? Integer.parseInt(countStr) : 0;
-        return Math.max(0, rateLimitThreshold - count);
+        return Math.max(0, rateLimitThreshold() - count);
+    }
+
+    /**
+     * 判断评论限流是否启用：优先使用可热更新配置，缺省时启用。
+     */
+    private boolean isRateLimitEnabled() {
+        return rateLimitProperties == null || rateLimitProperties.isEnabled();
+    }
+
+    /**
+     * 获取评论限流窗口秒数：优先使用可热更新配置。
+     */
+    private long rateLimitWindowSeconds() {
+        return rateLimitProperties == null ? RedisKeyConstants.LIMIT_COMMENT_WINDOW : rateLimitProperties.getWindowSeconds();
+    }
+
+    /**
+     * 获取评论限流阈值：优先使用可热更新配置。
+     */
+    private int rateLimitThreshold() {
+        return rateLimitProperties == null ? RedisKeyConstants.LIMIT_COMMENT_THRESHOLD : rateLimitProperties.getThreshold();
     }
 }

@@ -1,0 +1,43 @@
+server:
+  port: ${SERVER_PORT:8085}
+
+spring:
+  application:
+    name: canal-service
+  cloud:
+    sentinel:
+      enabled: ${SENTINEL_ENABLED:true}
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8719}
+      eager: true
+      filter:
+        enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+
+canal:
+  client:
+    enabled: ${CANAL_CLIENT_ENABLED:false}
+    host: ${CANAL_HOST:127.0.0.1}
+    port: ${CANAL_PORT:11111}
+    destination: ${CANAL_DESTINATION:example}
+    username: ${CANAL_USERNAME:}
+    password: ${CANAL_PASSWORD:}
+    filter: ${CANAL_FILTER:blog_cloud\..*}
+    batch-size: ${CANAL_BATCH_SIZE:100}
+    fixed-delay-ms: ${CANAL_FIXED_DELAY_MS:1000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,prometheus}
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS:never}
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -10,6 +10,28 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
     openfeign:
       circuitbreaker:
+        enabled: false
+      httpclient:
+        enabled: true
+        max-connections: ${FEIGN_HTTPCLIENT_MAX_CONNECTIONS:200}
+        max-connections-per-route: ${FEIGN_HTTPCLIENT_MAX_CONNECTIONS_PER_ROUTE:50}
+        connection-timeout: ${FEIGN_HTTPCLIENT_CONNECTION_TIMEOUT:2000}
+        hc5:
+          enabled: true
+          socket-timeout: ${FEIGN_HTTPCLIENT_SOCKET_TIMEOUT:3000}
+          socket-timeout-unit: milliseconds
+      client:
+        config:
+          default:
+            connectTimeout: 2000
+            readTimeout: 3000
+    sentinel:
+      enabled: ${SENTINEL_ENABLED:true}
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:127.0.0.1:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8719}
+      eager: true
+      filter:
         enabled: true
     loadbalancer:
       cache:
@@ -45,14 +67,6 @@ springdoc:
   api-docs:
     enabled: true
 
-# Feign服务地址配置（可通过环境变量覆盖）
-feign:
-  client:
-    config:
-      default:
-        connectTimeout: 2000
-        readTimeout: 3000
-
 management:
   endpoints:
     web:
@@ -69,6 +83,7 @@ logging:
   level:
     com.commentservice: info
 
+# Retained for legacy non-Feign protection; Feign calls use Sentinel.
 resilience4j:
   circuitbreaker:
     instances:
@@ -95,3 +110,7 @@ auth:
   token-session:
     fail-open-on-redis-error: true
     local-cache-seconds: 300
+
+feign:
+  sentinel:
+    enabled: ${FEIGN_SENTINEL_ENABLED:true}

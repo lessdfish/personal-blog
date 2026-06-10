@@ -22,6 +22,8 @@ public final class RedisKeyConstants {
     public static final int LIKES_SYNC_THRESHOLD = 100;
 
     public static final String ARTICLE_VIEWS_KEY = "blog:article:views:";
+    public static final String ARTICLE_DETAIL_CACHE_KEY = "blog:article:detail:";
+    public static final String ARTICLE_HOT_CACHE_KEY = "blog:article:hot:";
     public static final String ARTICLE_HEAT_KEY = "blog:article:heat:";
     public static final String ARTICLE_HEAT_RANK_KEY = "blog:article:heat:rank";
     public static final String ARTICLE_FAVORITE_SET_KEY = "blog:article:favorite:";
@@ -48,4 +50,6 @@ public final class RedisKeyConstants {
     public static final String ROLE_PERMISSION_BY_ID_KEY = "blog:role:permission:id:";
     public static final String ROLE_PERMISSION_BY_CODE_KEY = "blog:role:permission:code:";
     public static final long ROLE_PERMISSION_CACHE_EXPIRE = 30 * 60;
+
+    public static final String CACHE_INVALIDATION_CHANNEL = "blog:cache:invalidation";
 }

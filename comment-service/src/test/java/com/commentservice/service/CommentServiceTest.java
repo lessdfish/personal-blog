@@ -6,6 +6,7 @@ import com.blogcommon.message.MqConstants;
 import com.blogcommon.result.Result;
 import com.commentservice.client.ArticleClient;
 import com.commentservice.client.UserClient;
+import com.commentservice.config.CommentRateLimitProperties;
 import com.commentservice.dto.CommentCreateDTO;
 import com.commentservice.dto.CommentPageQueryDTO;
 import com.commentservice.entity.Comment;
@@ -39,6 +40,7 @@ class CommentServiceTest {
     private final ArticleClient articleClient = mock(ArticleClient.class);
     private final UserClient userClient = mock(UserClient.class);
     private final StringRedisTemplate stringRedisTemplate = mock(StringRedisTemplate.class);
+    private final CommentRateLimitProperties rateLimitProperties = new CommentRateLimitProperties();
     private final CommentService commentService = new CommentService();
 
     @BeforeEach
@@ -48,7 +50,8 @@ class CommentServiceTest {
         ReflectionTestUtils.setField(commentService, "articleClient", articleClient);
         ReflectionTestUtils.setField(commentService, "userClient", userClient);
         ReflectionTestUtils.setField(commentService, "stringRedisTemplate", stringRedisTemplate);
-        ReflectionTestUtils.setField(commentService, "rateLimitEnabled", false);
+        rateLimitProperties.setEnabled(false);
+        ReflectionTestUtils.setField(commentService, "rateLimitProperties", rateLimitProperties);
     }
 
     @Test
@@ -211,7 +214,7 @@ class CommentServiceTest {
 
     @Test
     void getRemainingCommentsShouldSubtractRedisCounter() {
-        ReflectionTestUtils.setField(commentService, "rateLimitThreshold", 10);
+        rateLimitProperties.setThreshold(10);
         @SuppressWarnings("unchecked")
         ValueOperations<String, String> valueOperations = mock(ValueOperations.class);
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);

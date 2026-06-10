@@ -1,10 +1,12 @@
 package com.blogcommon.auth;
 
+import com.blogcommon.config.RefreshablePropertiesMarker;
 import com.blogcommon.constant.RedisKeyConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -13,7 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
-public class TokenSessionValidator {
+@RefreshScope
+public class TokenSessionValidator implements RefreshablePropertiesMarker {
     private static final Logger log = LoggerFactory.getLogger(TokenSessionValidator.class);
     private static final int CLEANUP_THRESHOLD = 1000;
     private final Map<String, Long> localTokenCache = new ConcurrentHashMap<>();

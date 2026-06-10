@@ -13,6 +13,7 @@ COPY user-service/pom.xml user-service/pom.xml
 COPY article-service/pom.xml article-service/pom.xml
 COPY comment-service/pom.xml comment-service/pom.xml
 COPY notify-service/pom.xml notify-service/pom.xml
+COPY canal-service/pom.xml canal-service/pom.xml
 
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -ntp -pl ${SERVICE_MODULE} -am dependency:go-offline -DskipTests
@@ -23,6 +24,7 @@ COPY user-service user-service
 COPY article-service article-service
 COPY comment-service comment-service
 COPY notify-service notify-service
+COPY canal-service canal-service
 
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -ntp -pl ${SERVICE_MODULE} -am clean package -DskipTests -Dmaven.test.skip=true -Djacoco.skip=true
