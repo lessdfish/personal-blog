@@ -4,8 +4,6 @@ pipeline {
   environment {
     GHCR_OWNER = 'lessdfish'
     REGISTRY = "ghcr.io/${GHCR_OWNER}"
-    VM_HOST = '192.168.147.129'
-    VM_USER = 'deploy'
     DEPLOY_DIR = '/opt/blog-cloud'
     DOCKER_BUILDKIT = '1'
   }
@@ -73,6 +71,11 @@ pipeline {
 
     stage('Deploy VM') {
       steps {
+        script {
+          if (!env.VM_HOST?.trim() || !env.VM_USER?.trim()) {
+            error('Set VM_HOST and VM_USER in Jenkins before deploying to the VM.')
+          }
+        }
         sshagent(credentials: ['vm-deploy-key']) {
           withCredentials([
             file(credentialsId: 'blog-cloud-env-file', variable: 'BLOG_CLOUD_ENV'),
@@ -81,15 +84,15 @@ pipeline {
             sh """
               set +x
 
-              ssh ${VM_USER}@${VM_HOST} "mkdir -p ${DEPLOY_DIR} && rm -f ${DEPLOY_DIR}/.env.production.tmp"
+              ssh "\$VM_USER@\$VM_HOST" "mkdir -p ${DEPLOY_DIR} && rm -f ${DEPLOY_DIR}/.env.production.tmp"
 
-              scp docker-compose.yml docker-compose.images.yml ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/
-              rsync -az --delete deploy/ ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/deploy/
-              scp "\$BLOG_CLOUD_ENV" ${VM_USER}@${VM_HOST}:${DEPLOY_DIR}/.env.production.tmp
+              scp docker-compose.yml docker-compose.images.yml "\$VM_USER@\$VM_HOST:${DEPLOY_DIR}/"
+              rsync -az --delete deploy/ "\$VM_USER@\$VM_HOST:${DEPLOY_DIR}/deploy/"
+              scp "\$BLOG_CLOUD_ENV" "\$VM_USER@\$VM_HOST:${DEPLOY_DIR}/.env.production.tmp"
 
-              echo "\$GHCR_TOKEN" | ssh ${VM_USER}@${VM_HOST} "docker login ghcr.io -u '\$GHCR_USER' --password-stdin"
+              echo "\$GHCR_TOKEN" | ssh "\$VM_USER@\$VM_HOST" "docker login ghcr.io -u '\$GHCR_USER' --password-stdin"
 
-              ssh ${VM_USER}@${VM_HOST} "GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' DEPLOY_DIR='${DEPLOY_DIR}' bash -s" <<'REMOTE_SCRIPT'
+              ssh "\$VM_USER@\$VM_HOST" "GHCR_OWNER='${GHCR_OWNER}' IMAGE_TAG='${IMAGE_TAG}' DEPLOY_DIR='${DEPLOY_DIR}' bash -s" <<'REMOTE_SCRIPT'
                 set -e
                 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
                 export NO_PROXY=127.0.0.1,localhost,::1

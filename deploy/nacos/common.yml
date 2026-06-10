@@ -15,6 +15,20 @@ spring:
       host: ${REDIS_HOST:redis}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: redis-sentinel
+  data:
+    redis:
+      sentinel:
+        master: ${REDIS_SENTINEL_MASTER:mymaster}
+        nodes: ${REDIS_SENTINEL_NODES:redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
+
+---
+spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:rabbitmq}
     port: ${RABBITMQ_PORT:5672}
@@ -22,6 +36,31 @@ spring:
     password: ${RABBITMQ_PASSWORD:change-rabbitmq-password}
     publisher-confirm-type: correlated
     publisher-returns: true
+  cloud:
+    openfeign:
+      circuitbreaker:
+        enabled: false
+      httpclient:
+        enabled: true
+        max-connections: ${FEIGN_HTTPCLIENT_MAX_CONNECTIONS:200}
+        max-connections-per-route: ${FEIGN_HTTPCLIENT_MAX_CONNECTIONS_PER_ROUTE:50}
+        connection-timeout: ${FEIGN_HTTPCLIENT_CONNECTION_TIMEOUT:2000}
+        hc5:
+          enabled: true
+          socket-timeout: ${FEIGN_HTTPCLIENT_SOCKET_TIMEOUT:3000}
+          socket-timeout-unit: milliseconds
+    sentinel:
+      enabled: ${SENTINEL_ENABLED:true}
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:sentinel-dashboard:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8719}
+      eager: true
+      filter:
+        enabled: true
+
+feign:
+  sentinel:
+    enabled: ${FEIGN_SENTINEL_ENABLED:true}
 
 management:
   endpoints:
@@ -55,3 +94,12 @@ auth:
   token-session:
     fail-open-on-redis-error: false
     local-cache-seconds: 300
+
+blog:
+  cache:
+    enabled: ${BLOG_CACHE_ENABLED:true}
+    local-enabled: ${BLOG_CACHE_LOCAL_ENABLED:true}
+    redis-enabled: ${BLOG_CACHE_REDIS_ENABLED:true}
+    local-maximum-size: ${BLOG_CACHE_LOCAL_MAXIMUM_SIZE:1000}
+    local-ttl-seconds: ${BLOG_CACHE_LOCAL_TTL_SECONDS:300}
+    redis-ttl-seconds: ${BLOG_CACHE_REDIS_TTL_SECONDS:600}

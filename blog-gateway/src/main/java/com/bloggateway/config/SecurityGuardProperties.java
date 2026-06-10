@@ -1,11 +1,14 @@
 package com.bloggateway.config;
 
+import com.blogcommon.config.RefreshablePropertiesMarker;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Component;
 
 @Component
+@RefreshScope
 @ConfigurationProperties(prefix = "security.guard")
-public class SecurityGuardProperties {
+public class SecurityGuardProperties implements RefreshablePropertiesMarker {
     private boolean enabled = true;
     private long maxRequestBodyBytes = 10 * 1024 * 1024;
     private int maxPathLength = 2048;

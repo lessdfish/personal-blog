@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0.36
     container_name: blog-mysql
     restart: unless-stopped
     mem_limit: ${MYSQL_MEMORY_LIMIT:-768m}
@@ -14,10 +14,13 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-256M}
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --server-id=1
     ports:
       - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:
-      - mysql-data:/var/lib/mysql
+      - ${MYSQL_DATA_VOLUME:-mysql-data}:/var/lib/mysql
       - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
@@ -46,6 +49,93 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  redis-master:
+    image: redis:7-alpine
+    container_name: blog-redis-master
+    restart: unless-stopped
+    profiles:
+      - redis-sentinel
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    volumes:
+      - redis-master-data:/data
+      - ./deploy/redis/redis-master.conf:/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis-replica-1:
+    image: redis:7-alpine
+    container_name: blog-redis-replica-1
+    restart: unless-stopped
+    profiles:
+      - redis-sentinel
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    volumes:
+      - redis-replica-1-data:/data
+      - ./deploy/redis/redis-replica.conf:/etc/redis/redis.conf:ro
+
+  redis-replica-2:
+    image: redis:7-alpine
+    container_name: blog-redis-replica-2
+    restart: unless-stopped
+    profiles:
+      - redis-sentinel
+    command: ["redis-server", "/etc/redis/redis.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    volumes:
+      - redis-replica-2-data:/data
+      - ./deploy/redis/redis-replica.conf:/etc/redis/redis.conf:ro
+
+  redis-sentinel-1:
+    image: redis:7-alpine
+    container_name: blog-redis-sentinel-1
+    restart: unless-stopped
+    profiles:
+      - redis-sentinel
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_started
+      redis-replica-2:
+        condition: service_started
+    volumes:
+      - ./deploy/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    container_name: blog-redis-sentinel-2
+    restart: unless-stopped
+    profiles:
+      - redis-sentinel
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+    depends_on:
+      redis-sentinel-1:
+        condition: service_started
+    volumes:
+      - ./deploy/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    container_name: blog-redis-sentinel-3
+    restart: unless-stopped
+    profiles:
+      - redis-sentinel
+    command: ["sh", "-c", "cp /etc/redis/sentinel.conf /tmp/sentinel.conf && redis-sentinel /tmp/sentinel.conf"]
+    depends_on:
+      redis-sentinel-1:
+        condition: service_started
+    volumes:
+      - ./deploy/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -96,6 +186,18 @@ services:
       timeout: 5s
       retries: 20
 
+  sentinel-dashboard:
+    image: bladex/sentinel-dashboard:1.8.6
+    container_name: blog-sentinel-dashboard
+    restart: unless-stopped
+    mem_limit: ${SENTINEL_DASHBOARD_MEMORY_LIMIT:-256m}
+    cpus: ${SENTINEL_DASHBOARD_CPUS:-0.5}
+    environment:
+      JAVA_OPTS: ${SENTINEL_DASHBOARD_JAVA_OPTS:--Dserver.port=8858 -Dcsp.sentinel.dashboard.server=localhost:8858 -Dproject.name=sentinel-dashboard -Xms128m -Xmx192m}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${SENTINEL_DASHBOARD_PORT:-8858}:8858"
+
   elasticsearch:
     image: elasticsearch:8.13.0
     container_name: blog-elasticsearch
@@ -116,6 +218,27 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
+
+  canal-server:
+    image: canal/canal-server:v1.1.7
+    container_name: blog-canal-server
+    restart: unless-stopped
+    profiles:
+      - canal
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      canal.instance.master.address: mysql:3306
+      canal.instance.dbUsername: ${CANAL_DB_USERNAME:-root}
+      canal.instance.dbPassword: ${MYSQL_ROOT_PASSWORD:-change-root-password}
+      canal.instance.filter.regex: ${CANAL_FILTER:-blog_cloud\..*}
+      canal.instance.connectionCharset: UTF-8
+      canal.instance.tsdb.enable: "false"
+      canal.auto.scan: "false"
+      canal.destinations: ${CANAL_DESTINATION:-example}
+    ports:
+      - "${CANAL_PORT:-11111}:11111"
 
   zipkin:
     image: openzipkin/zipkin:3
@@ -183,7 +306,7 @@ services:
       nacos:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: prod
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8081
       JAVA_OPTS: ${USER_SERVICE_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -XX:+ExitOnOutOfMemoryError}
       TZ: ${TZ:-Asia/Shanghai}
@@ -193,6 +316,7 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
       NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
       NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      SENTINEL_DASHBOARD: sentinel-dashboard:8858
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
@@ -201,6 +325,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SENTINEL_MASTER: ${REDIS_SENTINEL_MASTER:-mymaster}
+      REDIS_SENTINEL_NODES: ${REDIS_SENTINEL_NODES:-redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-Lax}
       AVATAR_UPLOAD_DIR: /app/data/avatars
@@ -230,7 +356,7 @@ services:
       elasticsearch:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: prod
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8082
       JAVA_OPTS: ${ARTICLE_SERVICE_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -XX:+ExitOnOutOfMemoryError}
       TZ: ${TZ:-Asia/Shanghai}
@@ -240,6 +366,7 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
       NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
       NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      SENTINEL_DASHBOARD: sentinel-dashboard:8858
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
@@ -248,6 +375,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SENTINEL_MASTER: ${REDIS_SENTINEL_MASTER:-mymaster}
+      REDIS_SENTINEL_NODES: ${REDIS_SENTINEL_NODES:-redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
@@ -275,7 +404,7 @@ services:
       nacos:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: prod
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8083
       JAVA_OPTS: ${COMMENT_SERVICE_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -XX:+ExitOnOutOfMemoryError}
       TZ: ${TZ:-Asia/Shanghai}
@@ -285,6 +414,7 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
       NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
       NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      SENTINEL_DASHBOARD: sentinel-dashboard:8858
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
@@ -293,6 +423,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SENTINEL_MASTER: ${REDIS_SENTINEL_MASTER:-mymaster}
+      REDIS_SENTINEL_NODES: ${REDIS_SENTINEL_NODES:-redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
@@ -319,7 +451,7 @@ services:
       nacos:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: prod
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8084
       JAVA_OPTS: ${NOTIFY_SERVICE_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -XX:+ExitOnOutOfMemoryError}
       TZ: ${TZ:-Asia/Shanghai}
@@ -329,6 +461,7 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
       NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
       NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      SENTINEL_DASHBOARD: sentinel-dashboard:8858
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_DATABASE: ${MYSQL_DATABASE:-blog_cloud}
@@ -337,10 +470,56 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SENTINEL_MASTER: ${REDIS_SENTINEL_MASTER:-mymaster}
+      REDIS_SENTINEL_NODES: ${REDIS_SENTINEL_NODES:-redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-blog_cloud}
       RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-change-rabbitmq-password}
+
+  canal-service:
+    build:
+      context: .
+      dockerfile: docker/backend-service.Dockerfile
+      args:
+        SERVICE_MODULE: canal-service
+        SERVICE_PORT: 8085
+    container_name: blog-canal-service
+    restart: unless-stopped
+    profiles:
+      - canal
+    mem_limit: ${CANAL_SERVICE_MEMORY_LIMIT:-512m}
+    cpus: ${CANAL_SERVICE_CPUS:-1.0}
+    depends_on:
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      canal-server:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SERVER_PORT: 8085
+      JAVA_OPTS: ${CANAL_SERVICE_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -XX:+ExitOnOutOfMemoryError}
+      TZ: ${TZ:-Asia/Shanghai}
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      SENTINEL_DASHBOARD: sentinel-dashboard:8858
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SENTINEL_MASTER: ${REDIS_SENTINEL_MASTER:-mymaster}
+      REDIS_SENTINEL_NODES: ${REDIS_SENTINEL_NODES:-redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
+      CANAL_CLIENT_ENABLED: ${CANAL_CLIENT_ENABLED:-true}
+      CANAL_HOST: canal-server
+      CANAL_PORT: 11111
+      CANAL_DESTINATION: ${CANAL_DESTINATION:-example}
+      CANAL_USERNAME: ${CANAL_USERNAME:-}
+      CANAL_PASSWORD: ${CANAL_PASSWORD:-}
 
   blog-gateway:
     build:
@@ -367,7 +546,7 @@ services:
       notify-service:
         condition: service_started
     environment:
-      SPRING_PROFILES_ACTIVE: prod
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 18080
       JAVA_OPTS: ${BLOG_GATEWAY_JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=96m -XX:MaxDirectMemorySize=128m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/app/logs -XX:+ExitOnOutOfMemoryError}
       TZ: ${TZ:-Asia/Shanghai}
@@ -377,9 +556,12 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
       NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-BLOG_CLOUD}
       NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-BLOG_CLOUD}
+      SENTINEL_DASHBOARD: sentinel-dashboard:8858
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_SENTINEL_MASTER: ${REDIS_SENTINEL_MASTER:-mymaster}
+      REDIS_SENTINEL_NODES: ${REDIS_SENTINEL_NODES:-redis-sentinel-1:26379,redis-sentinel-2:26379,redis-sentinel-3:26379}
       CORS_ALLOWED_ORIGIN_PATTERNS: ${CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:18081,http://127.0.0.1:18081}
     ports:
       - "${GATEWAY_PUBLIC_PORT:-18080}:18080"
@@ -402,6 +584,8 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
     restart: unless-stopped
+    profiles:
+      - tunnel
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       blog-web:
@@ -425,9 +609,30 @@ services:
       - ./deploy/nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
       - ./deploy/nginx/certs:/etc/nginx/certs:ro
 
+  openresty:
+    image: openresty/openresty:1.25.3.2-alpine
+    container_name: blog-openresty
+    restart: unless-stopped
+    profiles:
+      - openresty
+    depends_on:
+      blog-web:
+        condition: service_started
+      blog-gateway:
+        condition: service_started
+    ports:
+      - "${OPENRESTY_PORT:-18083}:80"
+    volumes:
+      - ./deploy/openresty/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./deploy/openresty/conf.d:/etc/nginx/conf.d:ro
+
 volumes:
   mysql-data:
+  mysql80-data:
   redis-data:
+  redis-master-data:
+  redis-replica-1-data:
+  redis-replica-2-data:
   rabbitmq-data:
   nacos-data:
   nacos-logs:

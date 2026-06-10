@@ -15,6 +15,7 @@ CONFIG_FILES=(
   "article-service.yml"
   "comment-service.yml"
   "notify-service.yml"
+  "canal-service.yml"
   "blog-gateway.yml"
 )
 

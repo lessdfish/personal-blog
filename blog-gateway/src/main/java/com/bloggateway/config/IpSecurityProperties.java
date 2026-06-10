@@ -1,14 +1,17 @@
 package com.bloggateway.config;
 
+import com.blogcommon.config.RefreshablePropertiesMarker;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
+@RefreshScope
 @ConfigurationProperties(prefix = "security.ip")
-public class IpSecurityProperties {
+public class IpSecurityProperties implements RefreshablePropertiesMarker {
     private List<String> trustedProxies = new ArrayList<>(List.of("127.0.0.1", "::1"));
     private Blocklist blocklist = new Blocklist();
 

@@ -5,13 +5,35 @@ spring:
   cloud:
     openfeign:
       circuitbreaker:
+        enabled: false
+      httpclient:
         enabled: true
+        max-connections: ${FEIGN_HTTPCLIENT_MAX_CONNECTIONS:200}
+        max-connections-per-route: ${FEIGN_HTTPCLIENT_MAX_CONNECTIONS_PER_ROUTE:50}
+        connection-timeout: ${FEIGN_HTTPCLIENT_CONNECTION_TIMEOUT:2000}
+        hc5:
+          enabled: true
+          socket-timeout: ${FEIGN_HTTPCLIENT_SOCKET_TIMEOUT:3000}
+          socket-timeout-unit: milliseconds
+      client:
+        config:
+          default:
+            connectTimeout: 2000
+            readTimeout: 3000
     loadbalancer:
       cache:
         enabled: true
         caffeine:
           spec: initialCapacity=32,maximumSize=256,expireAfterWrite=30s
       retry:
+        enabled: true
+    sentinel:
+      enabled: ${SENTINEL_ENABLED:true}
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:sentinel-dashboard:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8719}
+      eager: true
+      filter:
         enabled: true
 
 mybatis:
@@ -26,17 +48,11 @@ springdoc:
   api-docs:
     enabled: true
 
-feign:
-  client:
-    config:
-      default:
-        connectTimeout: 2000
-        readTimeout: 3000
-
 logging:
   level:
     com.commentservice: info
 
+# Retained for legacy non-Feign protection; Feign calls use Sentinel.
 resilience4j:
   circuitbreaker:
     instances:
@@ -58,3 +74,7 @@ resilience4j:
         max-attempts: 3
         wait-duration: 500ms
         exponential-backoff-multiplier: 2
+
+feign:
+  sentinel:
+    enabled: ${FEIGN_SENTINEL_ENABLED:true}

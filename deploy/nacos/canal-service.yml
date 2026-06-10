@@ -1,0 +1,29 @@
+server:
+  port: 8085
+
+spring:
+  cloud:
+    sentinel:
+      enabled: ${SENTINEL_ENABLED:true}
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:sentinel-dashboard:8858}
+        port: ${SENTINEL_TRANSPORT_PORT:8719}
+      eager: true
+      filter:
+        enabled: true
+
+canal:
+  client:
+    enabled: ${CANAL_CLIENT_ENABLED:false}
+    host: ${CANAL_HOST:canal-server}
+    port: ${CANAL_PORT:11111}
+    destination: ${CANAL_DESTINATION:example}
+    username: ${CANAL_USERNAME:}
+    password: ${CANAL_PASSWORD:}
+    filter: ${CANAL_FILTER:blog_cloud\..*}
+    batch-size: ${CANAL_BATCH_SIZE:100}
+    fixed-delay-ms: ${CANAL_FIXED_DELAY_MS:1000}
+
+logging:
+  level:
+    com.canalservice: info

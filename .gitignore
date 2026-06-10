@@ -40,6 +40,9 @@ run-logs/
 logs/
 **/logs/
 *.log
+*.jtl
+jmeter-data/
+jmeter-results/
 *.hprof
 *.dump
 *.dumpstream

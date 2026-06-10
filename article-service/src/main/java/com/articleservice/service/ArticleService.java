@@ -21,9 +21,11 @@ import com.articleservice.vo.BoardVO;
 import com.articleservice.vo.PageVO;
 import com.articleservice.vo.UserSimpleVO;
 import com.blogcommon.auth.RequestUserContext;
+import com.blogcommon.cache.MultiLevelCacheService;
 import com.blogcommon.constant.RedisKeyConstants;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
+import com.blogcommon.lock.DistributedLockService;
 import com.blogcommon.logging.DbWriteAuditLogger;
 import com.blogcommon.message.ArticleEsSyncMessage;
 import com.blogcommon.message.ArticleInteractionNotifyMessage;
@@ -41,6 +43,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,9 +57,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class ArticleService {
-    private static final String ARTICLE_DETAIL_CACHE_KEY = "blog:article:detail:";
-    private static final String ARTICLE_HOT_CACHE_KEY = "blog:article:hot:";
-
     @Autowired
     private ArticleMapper articleMapper;
     @Autowired
@@ -77,6 +77,10 @@ public class ArticleService {
     private ArticleAsyncService articleAsyncService;
     @Autowired(required = false)
     private ArticleSearchService articleSearchService;
+    @Autowired(required = false)
+    private MultiLevelCacheService multiLevelCacheService;
+    @Autowired(required = false)
+    private DistributedLockService distributedLockService;
 
     /**
      * 发布文章：校验登录和文章内容，保存到数据库，然后刷新热度并发送搜索索引同步消息。
@@ -205,27 +209,23 @@ public class ArticleService {
         if (id == null) {
             throw new BusinessException(ResultCode.PARAM_NULL);
         }
-        String cacheKey = ARTICLE_DETAIL_CACHE_KEY + id;
+        String cacheKey = RedisKeyConstants.ARTICLE_DETAIL_CACHE_KEY + id;
+        if (multiLevelCacheService != null) {
+            ArticleDetailVO vo = multiLevelCacheService.get(cacheKey, ArticleDetailVO.class,
+                    () -> loadArticleDetail(id));
+            recordView(id, viewerKey);
+            enrichArticleDetailStats(id, vo);
+            return vo;
+        }
         ArticleDetailVO cached = readCache(cacheKey, ArticleDetailVO.class);
         if (cached != null) {
             recordView(id, viewerKey);
-            cached.setViewCount(Math.toIntExact(articleMapper.selectViewCountById(id)));
-            cached.setHeatScore(getHeat(id));
-            cached.setLikeCount(Math.toIntExact(getArticleLikes(id)));
-            cached.setFavoriteCount(Math.toIntExact(getArticleFavorites(id)));
+            enrichArticleDetailStats(id, cached);
             return cached;
         }
 
-        Article article = articleMapper.selectById(id);
-        if (article == null) {
-            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
-        }
-
+        ArticleDetailVO vo = loadArticleDetail(id);
         recordView(id, viewerKey);
-        article.setViewCount(article.getViewCount() + 1);
-        ArticleDetailVO vo = ArticleConverter.toArticleDetailVO(article, boardMapper.selectById(article.getBoardId()), getHeat(id));
-        vo.setLikeCount(Math.toIntExact(getArticleLikes(id)));
-        vo.setFavoriteCount(Math.toIntExact(getArticleFavorites(id)));
         writeCache(cacheKey, vo, 10, TimeUnit.MINUTES);
         return vo;
     }
@@ -235,13 +235,17 @@ public class ArticleService {
      */
     public List<ArticleListVO> listHotArticles(Integer limit) {
         int safeLimit = limit == null || limit < 1 ? 10 : Math.min(limit, 20);
-        String cacheKey = ARTICLE_HOT_CACHE_KEY + safeLimit;
+        String cacheKey = RedisKeyConstants.ARTICLE_HOT_CACHE_KEY + safeLimit;
+        if (multiLevelCacheService != null) {
+            ArticleListVO[] hotArticles = multiLevelCacheService.get(cacheKey, ArticleListVO[].class,
+                    () -> loadHotArticles(safeLimit).toArray(new ArticleListVO[0]));
+            return List.of(hotArticles);
+        }
         ArticleListVO[] cached = readCache(cacheKey, ArticleListVO[].class);
         if (cached != null) {
             return List.of(cached);
         }
-        HotArticleSlice slice = getHotArticles(safeLimit);
-        List<ArticleListVO> list = buildArticleListVOs(slice.articles(), slice.heatMap());
+        List<ArticleListVO> list = loadHotArticles(safeLimit);
         writeCache(cacheKey, list, 5, TimeUnit.MINUTES);
         return list;
     }
@@ -263,6 +267,46 @@ public class ArticleService {
         vo.setTitle(article.getTitle());
         vo.setAllowComment(article.getAllowComment());
         return vo;
+    }
+
+    /**
+     * 加载文章详情：从数据库读取文章和版块信息，供多级缓存未命中时回源。
+     */
+    private ArticleDetailVO loadArticleDetail(Long id) {
+        Article article = articleMapper.selectById(id);
+        if (article == null) {
+            throw new BusinessException(ResultCode.ARTICLE_NOT_EXIST);
+        }
+        article.setViewCount(article.getViewCount() + 1);
+        ArticleDetailVO vo = ArticleConverter.toArticleDetailVO(
+                article,
+                boardMapper.selectById(article.getBoardId()),
+                getHeat(id)
+        );
+        vo.setLikeCount(Math.toIntExact(getArticleLikes(id)));
+        vo.setFavoriteCount(Math.toIntExact(getArticleFavorites(id)));
+        return vo;
+    }
+
+    /**
+     * 补充文章详情动态统计：缓存命中后仍读取浏览、热度、点赞和收藏的最新值。
+     */
+    private void enrichArticleDetailStats(Long id, ArticleDetailVO vo) {
+        if (vo == null) {
+            return;
+        }
+        vo.setViewCount(Math.toIntExact(articleMapper.selectViewCountById(id)));
+        vo.setHeatScore(getHeat(id));
+        vo.setLikeCount(Math.toIntExact(getArticleLikes(id)));
+        vo.setFavoriteCount(Math.toIntExact(getArticleFavorites(id)));
+    }
+
+    /**
+     * 加载热门文章列表：从热榜或数据库构建前端列表对象。
+     */
+    private List<ArticleListVO> loadHotArticles(int safeLimit) {
+        HotArticleSlice slice = getHotArticles(safeLimit);
+        return buildArticleListVOs(slice.articles(), slice.heatMap());
     }
 
     /**
@@ -457,6 +501,18 @@ public class ArticleService {
         }
 
         String lockKey = RedisKeyConstants.LOCK_ARTICLE_EDIT_KEY + articleId;
+        if (distributedLockService != null) {
+            String lockValue = distributedLockService.tryLock(lockKey, Duration.ofSeconds(RedisKeyConstants.LOCK_EXPIRE));
+            if (lockValue == null) {
+                throw new BusinessException(ResultCode.ARTICLE_EDIT_LOCKED);
+            }
+            try {
+                updateArticleContent(article, dto, articleId);
+                return;
+            } finally {
+                distributedLockService.unlock(lockKey, lockValue);
+            }
+        }
         String lockValue = stringRedisTemplate == null ? "local" : RedisLockUtil.tryLock(
                 stringRedisTemplate, lockKey, RedisKeyConstants.LOCK_EXPIRE);
         if (lockValue == null) {
@@ -464,17 +520,7 @@ public class ArticleService {
         }
 
         try {
-            validatePublishDTO(dto);
-            article.setTitle(dto.getTitle());
-            article.setSummary(buildSummary(dto));
-            article.setContent(dto.getContent());
-            article.setBoardId(dto.getBoardId());
-            article.setTags(dto.getTags());
-            if (articleMapper.updateArticle(article) <= 0) {
-                throw new BusinessException(ResultCode.ARTICLE_UPDATE_FAILED);
-            }
-            clearArticleCache(articleId);
-            sendArticleEsSync(ArticleEsSyncMessage.upsert(articleId));
+            updateArticleContent(article, dto, articleId);
         } finally {
             if (stringRedisTemplate != null) {
                 RedisLockUtil.unlock(stringRedisTemplate, lockKey, lockValue);
@@ -620,6 +666,23 @@ public class ArticleService {
         if (!StringUtils.hasText(dto.getContent())) {
             throw new BusinessException(ResultCode.CONTENT_NOT_NULL);
         }
+    }
+
+    /**
+     * 更新文章正文信息：保存编辑结果，并同步清理缓存和搜索索引。
+     */
+    private void updateArticleContent(Article article, ArticlePublishDTO dto, Long articleId) {
+        validatePublishDTO(dto);
+        article.setTitle(dto.getTitle());
+        article.setSummary(buildSummary(dto));
+        article.setContent(dto.getContent());
+        article.setBoardId(dto.getBoardId());
+        article.setTags(dto.getTags());
+        if (articleMapper.updateArticle(article) <= 0) {
+            throw new BusinessException(ResultCode.ARTICLE_UPDATE_FAILED);
+        }
+        clearArticleCache(articleId);
+        sendArticleEsSync(ArticleEsSyncMessage.upsert(articleId));
     }
 
     /**
@@ -827,11 +890,15 @@ public class ArticleService {
      * 清理文章相关缓存：删除详情缓存，并异步删除热榜列表缓存。
      */
     private void clearArticleCache(Long articleId) {
-        if (stringRedisTemplate == null) {
-            return;
+        String detailKey = RedisKeyConstants.ARTICLE_DETAIL_CACHE_KEY + articleId;
+        if (multiLevelCacheService != null) {
+            multiLevelCacheService.evict(detailKey);
+            multiLevelCacheService.evictByPrefix(RedisKeyConstants.ARTICLE_HOT_CACHE_KEY);
         }
-        stringRedisTemplate.delete(ARTICLE_DETAIL_CACHE_KEY + articleId);
-        articleAsyncService.evictHotListCaches();
+        if (stringRedisTemplate != null) {
+            stringRedisTemplate.delete(detailKey);
+            articleAsyncService.evictHotListCaches();
+        }
     }
 
     /**
@@ -917,10 +984,18 @@ public class ArticleService {
      * 带分布式锁执行点赞或收藏：避免用户连续点击导致数据重复或数量不准。
      */
     private boolean executeInteractionWithLock(String lockPrefix, Long userId, Long articleId, InteractionAction action) {
+        String lockKey = lockPrefix + userId + ":" + articleId;
+        if (distributedLockService != null) {
+            return distributedLockService.executeWithLock(
+                    lockKey,
+                    Duration.ofSeconds(5),
+                    action::execute,
+                    () -> getCurrentState(lockPrefix, userId, articleId)
+            );
+        }
         if (stringRedisTemplate == null) {
             return action.execute();
         }
-        String lockKey = lockPrefix + userId + ":" + articleId;
         String lockValue = RedisLockUtil.tryLockWithRetry(stringRedisTemplate, lockKey, 5, 3, 50);
         if (!StringUtils.hasText(lockValue)) {
             return getCurrentState(lockPrefix, userId, articleId);

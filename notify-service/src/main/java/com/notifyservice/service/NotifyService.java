@@ -1,6 +1,7 @@
 package com.notifyservice.service;
 
 import com.blogcommon.constant.RedisKeyConstants;
+import com.blogcommon.cache.MultiLevelCacheService;
 import com.blogcommon.enums.ResultCode;
 import com.blogcommon.exception.BusinessException;
 import com.blogcommon.logging.DbWriteAuditLogger;
@@ -38,6 +39,8 @@ public class NotifyService {
     private NotifyMapper notifyMapper;
     @Autowired(required = false)
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired(required = false)
+    private MultiLevelCacheService multiLevelCacheService;
 
     private static final int NOTIFY_TYPE_COMMENT = 1;
     private static final int NOTIFY_TYPE_LIKE = 2;
@@ -94,6 +97,9 @@ public class NotifyService {
             String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
             stringRedisTemplate.opsForValue().increment(key);
             stringRedisTemplate.expire(key, RedisKeyConstants.NOTIFY_UNREAD_EXPIRE, TimeUnit.SECONDS);
+            if (multiLevelCacheService != null) {
+                multiLevelCacheService.evict(key);
+            }
         }
     }
 
@@ -113,6 +119,9 @@ public class NotifyService {
                     String.valueOf(next),
                     RedisKeyConstants.NOTIFY_UNREAD_EXPIRE,
                     TimeUnit.SECONDS);
+            if (multiLevelCacheService != null) {
+                multiLevelCacheService.put(key, next);
+            }
         }
     }
 
@@ -126,6 +135,9 @@ public class NotifyService {
         if (stringRedisTemplate != null && userId != null) {
             String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
             stringRedisTemplate.delete(key);
+            if (multiLevelCacheService != null) {
+                multiLevelCacheService.evict(key);
+            }
         }
     }
 
@@ -184,10 +196,21 @@ public class NotifyService {
         if (userId == null) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
+        String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
+        if (multiLevelCacheService != null) {
+            Long count = multiLevelCacheService.get(
+                    key,
+                    Long.class,
+                    () -> {
+                        Long databaseCount = notifyMapper.countUnreadByUserId(userId);
+                        return databaseCount == null ? 0L : databaseCount;
+                    }
+            );
+            return count == null ? 0L : count;
+        }
         
         // 先查Redis缓存
         if (stringRedisTemplate != null) {
-            String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
             String cached = stringRedisTemplate.opsForValue().get(key);
             if (cached != null) {
                 return Long.parseLong(cached);
@@ -199,7 +222,6 @@ public class NotifyService {
         
         // 写入缓存
         if (stringRedisTemplate != null && count != null) {
-            String key = RedisKeyConstants.NOTIFY_UNREAD_KEY + userId;
             stringRedisTemplate.opsForValue().set(key, count.toString(), 
                     RedisKeyConstants.NOTIFY_UNREAD_EXPIRE, TimeUnit.SECONDS);
         }
@@ -296,6 +318,9 @@ public class NotifyService {
                 String.valueOf(count == null ? 0L : count),
                 RedisKeyConstants.NOTIFY_UNREAD_EXPIRE,
                 TimeUnit.SECONDS);
+        if (multiLevelCacheService != null) {
+            multiLevelCacheService.put(key, count == null ? 0L : count);
+        }
     }
 
     /**
