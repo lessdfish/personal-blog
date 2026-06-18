@@ -10,19 +10,21 @@ package com.articleservice.config;
  * @Version: v1.0
  *
  */
+import com.blogcommon.web.CommonJwtInterceptor;
+import com.blogcommon.auth.JwtRequestAuthenticator;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-    private final JwtInterceptor jwtInterceptor;
+    private final JwtRequestAuthenticator jwtRequestAuthenticator;
 
     /**
      * 构造 Web 配置：注入 JWT 拦截器，后面才能把它注册到接口路径上。
      */
-    public WebConfig(JwtInterceptor jwtInterceptor) {
-        this.jwtInterceptor = jwtInterceptor;
+    public WebConfig(JwtRequestAuthenticator jwtRequestAuthenticator) {
+        this.jwtRequestAuthenticator = jwtRequestAuthenticator;
     }
 
     /**
@@ -30,7 +32,7 @@ public class WebConfig implements WebMvcConfigurer {
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(jwtInterceptor)
+        registry.addInterceptor(new CommonJwtInterceptor(jwtRequestAuthenticator))
                 .addPathPatterns("/**")
                 .excludePathPatterns("/article/page",
                         "/article/page/normal",
