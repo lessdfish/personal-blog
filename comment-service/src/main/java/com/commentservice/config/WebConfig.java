@@ -10,20 +10,19 @@ package com.commentservice.config;
  * @Version: v1.0
  *
  */
-import com.commentservice.config.JwtInterceptor;
+import com.blogcommon.web.CommonJwtInterceptor;
+import com.blogcommon.auth.JwtRequestAuthenticator;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
-    private final JwtInterceptor jwtInterceptor;
+    private final JwtRequestAuthenticator jwtRequestAuthenticator;
 
-    /**
-     * 构造 WebConfig：注入这个类运行时需要的依赖。
-     */
-    public WebConfig(JwtInterceptor jwtInterceptor) {
-        this.jwtInterceptor = jwtInterceptor;
+
+    public WebConfig(JwtRequestAuthenticator jwtRequestAuthenticator) {
+        this.jwtRequestAuthenticator = jwtRequestAuthenticator;
     }
 
     /**
@@ -31,7 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(jwtInterceptor)
+        registry.addInterceptor(new CommonJwtInterceptor(jwtRequestAuthenticator))
                 .addPathPatterns("/comment/**")
                 .excludePathPatterns("/comment/article/**",
                         "/comment/page");

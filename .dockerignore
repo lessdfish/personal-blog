@@ -8,6 +8,8 @@
 blog-web/node_modules
 blog-web/dist
 *.log
-.env.example1
+.env
+.env.*
+!.env.example
+!.env.example*
 blog-web/.env.local
-
